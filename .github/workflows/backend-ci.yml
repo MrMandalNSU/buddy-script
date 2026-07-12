@@ -1,0 +1,54 @@
+name: Backend CI
+
+on:
+  push:
+    paths: ["backend/**", ".github/workflows/backend-ci.yml"]
+  pull_request:
+    paths: ["backend/**", ".github/workflows/backend-ci.yml"]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: buddy
+          POSTGRES_PASSWORD: buddy
+          POSTGRES_DB: buddy_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U buddy -d buddy_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://buddy:buddy@localhost:5432/buddy_test
+      DIRECT_URL: postgresql://buddy:buddy@localhost:5432/buddy_test
+      RUN_DATABASE_TESTS: "true"
+      JWT_ACCESS_SECRET: ci-access-secret-ci-access-secret-ci-access-secret
+      JWT_REFRESH_SECRET: ci-refresh-secret-ci-refresh-secret-ci-refresh-secret
+      CURSOR_SIGNING_SECRET: ci-cursor-secret-ci-cursor-secret-ci-cursor-secret
+      ALLOWED_ORIGINS: http://localhost:3000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: backend/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm db:validate
+      - run: pnpm db:migrate:deploy
+      - run: pnpm db:seed
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build

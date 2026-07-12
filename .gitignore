@@ -34,3 +34,6 @@ yarn-error.log*
 .DS_Store
 Thumbs.db
 Desktop.ini
+
+# Generated documentations
+/backend/docs/
