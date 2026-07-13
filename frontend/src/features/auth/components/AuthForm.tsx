@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { authService } from "../service";
+import { useAuth } from "../AuthProvider";
 import type { LoginInput, RegisterInput } from "../types";
 import { validateLogin, validateRegistration, type FieldErrors } from "../validation";
 
@@ -14,6 +14,7 @@ const initialRegister: RegisterInput = { firstName: "", lastName: "", email: "",
 
 export function AuthForm({ kind }: { kind: AuthKind }) {
   const router = useRouter();
+  const auth = useAuth();
   const [values, setValues] = useState<LoginInput | RegisterInput>(kind === "login" ? initialLogin : initialRegister);
   const [errors, setErrors] = useState<FieldErrors<LoginInput & RegisterInput>>({});
   const [message, setMessage] = useState("");
@@ -24,7 +25,7 @@ export function AuthForm({ kind }: { kind: AuthKind }) {
     const nextErrors = kind === "login" ? validateLogin(values as LoginInput) : validateRegistration(values as RegisterInput);
     if (Object.keys(nextErrors).length) { setErrors(nextErrors); return; }
     setPending(true);
-    const result = kind === "login" ? await authService.login(values as LoginInput) : await authService.register(values as RegisterInput);
+    const result = kind === "login" ? await auth.login(values as LoginInput) : await auth.register(values as RegisterInput);
     setPending(false);
     if (!result.ok) { setErrors(result.error.fieldErrors ?? {}); setMessage(result.error.message); return; }
     router.replace("/feed"); router.refresh();
@@ -48,7 +49,7 @@ export function AuthForm({ kind }: { kind: AuthKind }) {
       {input("password", "Password", "password", kind === "login" ? "current-password" : "new-password")}
       {kind === "register" && input("confirmPassword", "Repeat Password", "password", "new-password")}
       <div className="form-options">
-        <label className="check"><input type="checkbox" checked={kind === "login" ? login.remember : register.acceptedTerms} onChange={(e) => update(kind === "login" ? "remember" : "acceptedTerms", e.target.checked)} /><span>{kind === "login" ? "Remember me" : "I agree to terms & conditions"}</span></label>
+        <label className="check"><input type="checkbox" checked={kind === "login" ? login.remember : register.acceptedTerms} disabled={kind === "login"} onChange={(e) => update(kind === "login" ? "remember" : "acceptedTerms", e.target.checked)} /><span>{kind === "login" ? "Secure session managed automatically" : "I agree to terms & conditions"}</span></label>
         {kind === "login" && <button className="text-button" type="button" disabled>Forgot password?</button>}
       </div>
       {errors.acceptedTerms && <span className="field-error">{errors.acceptedTerms}</span>}

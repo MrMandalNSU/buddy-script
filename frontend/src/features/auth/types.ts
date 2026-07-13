@@ -3,11 +3,11 @@ export type User = {
   firstName: string;
   lastName: string;
   email: string;
-  avatarUrl: string;
-  headline: string;
+  avatarUrl: string | null;
+  createdAt?: string;
 };
 
-export type Session = { user: User; expiresAt: string };
+export type Session = { user: User; accessExpiresAt?: string };
 export type LoginInput = { email: string; password: string; remember: boolean };
 export type RegisterInput = {
   firstName: string;
@@ -17,3 +17,4 @@ export type RegisterInput = {
   confirmPassword: string;
   acceptedTerms: boolean;
 };
+export type AuthState = { status: "loading" } | { status: "authenticated"; user: User } | { status: "anonymous" };

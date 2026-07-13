@@ -1,8 +1,10 @@
 import type { User } from "@/features/auth/types";
 export type Visibility = "public" | "private";
-export type ReactionSummary = { likedByViewer: boolean; users: User[] };
-export type Reply = { id: string; author: User; body: string; createdAt: string; reactions: ReactionSummary };
-export type Comment = { id: string; author: User; body: string; createdAt: string; reactions: ReactionSummary; replies: Reply[] };
-export type Post = { id: string; author: User; body: string; imageUrl?: string; visibility: Visibility; createdAt: string; reactions: ReactionSummary; comments: Comment[] };
-export type PaginatedFeed = { items: Post[]; nextCursor: string | null };
-export type CreatePostInput = { body: string; imageUrl?: string; visibility: Visibility };
+export type FeedUser = Pick<User, "id" | "firstName" | "lastName" | "avatarUrl">;
+export type Engagement = { likeCount: number; likedByViewer: boolean };
+export type VerifiedImage = { publicId: string; secureUrl: string; version: number; width: number; height: number; bytes: number; format: string };
+export type Comment = { id: string; postId: string; parentId: string | null; depth: 0 | 1; body: string; author: FeedUser; engagement: Engagement & { replyCount: number }; createdAt: string; updatedAt: string };
+export type Post = { id: string; body: string | null; visibility: Visibility; image: VerifiedImage | null; author: FeedUser; engagement: Engagement & { commentCount: number }; commentPreview: Comment[]; createdAt: string; updatedAt: string };
+export type Page<T> = { items: T[]; nextCursor: string | null };
+export type Liker = FeedUser & { likedAt: string };
+export type CreatePostInput = { body?: string; visibility: Visibility; image?: VerifiedImage & { signature: string } };

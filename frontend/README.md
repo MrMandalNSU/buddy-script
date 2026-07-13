@@ -1,24 +1,31 @@
 # BuddyScript frontend
 
-Next.js implementation of the supplied BuddyScript login, registration, and feed designs.
+Next.js implementation of the supplied BuddyScript authentication and feed designs, integrated with the Express/Neon backend.
 
 ## Run locally
 
+Create `.env.local` from `.env.example`, then run both applications in separate terminals:
+
 ```bash
-pnpm install
+# backend
+cd backend
+pnpm dev
+
+# frontend
+cd frontend
 pnpm dev
 ```
 
-Open `http://localhost:3000`. Any syntactically valid email and non-empty password can be used by the mock login. Registration validates all fields required by the selection task.
+`BACKEND_URL=http://localhost:4000` is server-only. Next.js rewrites same-origin `/api/v1/*` traffic to Express, so JWTs remain in backend-owned HTTP-only cookies. Open `http://localhost:3000` and use `alex@buddy.test` / `Password123!` after running the backend seed.
 
 ## Architecture
 
-- `src/app` contains App Router pages, mock authentication route handlers, and the Next.js request proxy.
-- `src/features/auth` owns authentication models, validation, UI, and the replaceable `AuthService` contract.
-- `src/features/feed` owns feed models, immutable transformations, UI, and the replaceable `FeedRepository` contract.
-- `src/shared` contains cross-feature primitives.
+- `src/shared/api` validates response envelopes, attaches CSRF and request IDs, enforces timeouts, and coalesces access-token refresh.
+- `src/features/auth` owns session bootstrap, authentication state, validation, guards, and backend payload mapping.
+- `src/features/feed` owns typed API repositories, cursor pagination, TanStack Query caches, optimistic reactions, comments/replies, likers, and signed Cloudinary uploads.
+- `src/app` composes providers and routes. It contains no credential-processing API routes.
 
-The feed adapter is intentionally in-memory and resets when the browser reloads. Authentication is also a frontend demonstration: its HTTP-only cookie protects navigation but is not a secure credential system. A production backend must validate credentials, issue signed/opaque sessions, enforce authorization, persist data, store uploaded images, paginate the feed, rate-limit mutations, and apply CSRF and abuse protections. The service/repository interfaces isolate that later integration.
+Tokens are never exposed to JavaScript or browser storage. Mutations read the backend-issued CSRF cookie immediately before each request. The feed uses bounded independent pagination for posts, comments, replies, and likers.
 
 ## Commands
 
@@ -27,6 +34,4 @@ The feed adapter is intentionally in-memory and resets when the browser reloads.
 - `pnpm test`
 - `pnpm build`
 
-## Implemented scope
-
-The complete supplied visual shell is represented. Required interactions include mock login/registration/logout, protected routing, public/private posts, text and image creation, newest-first ordering, post/comment/reply likes, nested comments and replies, liker lists, and persisted light/dark theme. Supplied out-of-scope controls remain visibly and accessibly disabled.
+Stories, search, sharing, following, video, event, article, messaging, and notifications remain presentational as allowed by the assignment.
