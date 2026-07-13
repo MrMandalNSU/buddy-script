@@ -2,6 +2,7 @@ import { normalizePageLimit, takePage } from "../../infrastructure/database/pagi
 import { AppError } from "../../shared/errors/app-error.js";
 import type { CursorService, TimelineCursor } from "../../shared/pagination/cursor.service.js";
 import type { PageQuery } from "../posts/post.schemas.js";
+import { commentDto } from "./comment.dto.js";
 import type { CommentLikerRecord, CommentRecord } from "./comment.types.js";
 import type { CommentRepository } from "./comment.repository.js";
 
@@ -59,12 +60,5 @@ export class CommentService {
   private likerCursor(liker: CommentLikerRecord | undefined): string | null { return liker === undefined ? null : this.cursors.encode({ createdAt: liker.createdAt, id: liker.id }); }
 }
 
-function commentDto(comment: CommentRecord) {
-  return {
-    id: comment.id, postId: comment.postId, parentId: comment.parentId, depth: comment.depth, body: comment.body,
-    createdAt: comment.createdAt.toISOString(), updatedAt: comment.updatedAt.toISOString(), author: comment.author,
-    engagement: { likeCount: comment.likeCount, replyCount: comment.replyCount, likedByViewer: comment.likedByViewer },
-  };
-}
 function notFound(resource: string): AppError { return new AppError(404, "NOT_FOUND", `${resource} was not found`); }
 function nestedReplyError(): AppError { return new AppError(400, "BAD_REQUEST", "Replies can only be added to root comments"); }

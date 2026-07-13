@@ -7,6 +7,7 @@ import type { LikerRecord, PostRecord } from "./post.types.js";
 import type { CachePort } from "../../infrastructure/cache/cache.port.js";
 import { PostVisibility } from "../../generated/prisma/client.js";
 import type { CloudinaryService } from "../uploads/cloudinary.service.js";
+import { commentDto } from "../comments/comment.dto.js";
 
 export class PostService {
   constructor(
@@ -68,7 +69,7 @@ function postDto(post: PostRecord) {
     id: post.id, body: post.body, visibility: post.visibility.toLowerCase(), image: post.image,
     createdAt: post.createdAt.toISOString(), updatedAt: post.updatedAt.toISOString(), author: post.author,
     engagement: { likeCount: post.likeCount, commentCount: post.commentCount, likedByViewer: post.likedByViewer },
-    commentPreview: post.commentPreview.map((comment) => ({ ...comment, createdAt: comment.createdAt.toISOString() })),
+    commentPreview: post.commentPreview.map(commentDto),
   };
 }
 function notFound(): AppError { return new AppError(404, "NOT_FOUND", "Post was not found"); }

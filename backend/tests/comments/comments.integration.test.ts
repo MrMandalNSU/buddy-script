@@ -50,6 +50,19 @@ databaseSuite("comments API", { concurrent: false }, () => {
     expect(first.status).toBe(201); expect(second.status).toBe(201);
     const firstId = dataId(first); const secondId = dataId(second);
 
+    const feed = (await alex.get("/api/v1/posts")).body as FeedBody;
+    const preview = feed.data.items.find(({ id }) => id === publicId)?.commentPreview[0];
+    expect(preview).toMatchObject({
+      id: secondId,
+      postId: publicId,
+      parentId: null,
+      depth: 0,
+      body: "Second root comment",
+      engagement: { likeCount: 0, replyCount: 0, likedByViewer: false },
+    });
+    expect(preview?.createdAt).toEqual(expect.any(String));
+    expect(preview?.updatedAt).toEqual(expect.any(String));
+
     const pageOne = (await alex.get(`/api/v1/posts/${publicId}/comments?limit=1`)).body as PageBody;
     expect(pageOne.data.items).toHaveLength(1);
     if (pageOne.data.nextCursor === null) throw new Error("Expected comment cursor");
@@ -107,5 +120,6 @@ function csrfCookie(response: Response): string {
 }
 function dataId(response: Response): string { return (response.body as { data: { id: string } }).data.id; }
 interface PageBody { data: { items: { id: string }[]; nextCursor: string | null } }
+interface FeedBody { data: { items: { id: string; commentPreview: { id: string; postId: string; parentId: string | null; depth: number; body: string; engagement: { likeCount: number; replyCount: number; likedByViewer: boolean }; createdAt: string; updatedAt: string }[] }[] } }
 interface ReactionBody { data: { liked: boolean; likeCount: number } }
 interface LikersBody { data: { items: { firstName: string; lastName: string }[]; nextCursor: string | null } }

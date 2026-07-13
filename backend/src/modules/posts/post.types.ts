@@ -7,7 +7,17 @@ export interface CreatePostInput {
 }
 export interface PostAuthor { id: string; firstName: string; lastName: string; avatarUrl: string | null }
 export interface CommentPreview {
-  id: string; body: string; createdAt: Date; likeCount: number; replyCount: number; likedByViewer: boolean; author: PostAuthor;
+  id: string;
+  postId: string;
+  parentId: string | null;
+  depth: number;
+  body: string;
+  likeCount: number;
+  replyCount: number;
+  likedByViewer: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+  author: PostAuthor;
 }
 export interface PostRecord {
   id: string; body: string | null; visibility: PostVisibility; createdAt: Date; updatedAt: Date;

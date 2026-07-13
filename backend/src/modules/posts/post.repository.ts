@@ -28,7 +28,7 @@ export class PostRepository {
         likes: { where: { userId: viewerId }, select: { id: true }, take: 1 },
         comments: {
           where: { parentId: null }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 2,
-          select: { id: true, body: true, createdAt: true, likeCount: true, replyCount: true, author: { select: authorSelect }, likes: { where: { userId: viewerId }, select: { id: true }, take: 1 } },
+          select: { id: true, postId: true, parentId: true, depth: true, body: true, createdAt: true, updatedAt: true, likeCount: true, replyCount: true, author: { select: authorSelect }, likes: { where: { userId: viewerId }, select: { id: true }, take: 1 } },
         },
       },
     });
@@ -108,7 +108,7 @@ export class PostRepository {
         id: true, body: true, visibility: true, createdAt: true, updatedAt: true,
         imagePublicId: true, imageSecureUrl: true, imageVersion: true, imageWidth: true, imageHeight: true, imageBytes: true, imageFormat: true,
         likeCount: true, commentCount: true, author: { select: authorSelect }, likes: { where: { userId: viewerId }, select: { id: true }, take: 1 },
-        comments: { where: { parentId: null }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 2, select: { id: true, body: true, createdAt: true, likeCount: true, replyCount: true, author: { select: authorSelect }, likes: { where: { userId: viewerId }, select: { id: true }, take: 1 } } },
+        comments: { where: { parentId: null }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 2, select: { id: true, postId: true, parentId: true, depth: true, body: true, createdAt: true, updatedAt: true, likeCount: true, replyCount: true, author: { select: authorSelect }, likes: { where: { userId: viewerId }, select: { id: true }, take: 1 } } },
       },
     });
     return rows.map((row) => ({ id: row.id, body: row.body, visibility: row.visibility, createdAt: row.createdAt, updatedAt: row.updatedAt, image: imageFrom(row), likeCount: row.likeCount, commentCount: row.commentCount, likedByViewer: row.likes.length > 0, author: row.author, commentPreview: row.comments.map(({ likes, ...comment }) => ({ ...comment, likedByViewer: likes.length > 0 })) }));
