@@ -4,6 +4,8 @@ import type { Environment } from "../../config/env.js";
 const redactPaths = [
   "req.headers.authorization",
   "req.headers.cookie",
+  "req.headers.x-csrf-token",
+  "req.headers['x-csrf-token']",
   "res.headers.set-cookie",
   "password",
   "token",
