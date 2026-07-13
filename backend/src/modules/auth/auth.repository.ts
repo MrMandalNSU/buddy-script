@@ -10,7 +10,7 @@ export interface NewSession {
   id: string; userId: string; familyId: string; tokenHash: string; expiresAt: Date; ipHash?: string; userAgentHash?: string;
 }
 export interface NewUser extends NewSession {
-  firstName: string; lastName: string; email: string; emailNormalized: string; passwordHash: string;
+  firstName: string; lastName: string; email: string; emailNormalized: string; passwordHash: string; avatarUrl: string;
 }
 
 const authUserSelect = { id: true, firstName: true, lastName: true, email: true, avatarUrl: true, passwordHash: true, status: true, createdAt: true } as const;
@@ -31,7 +31,7 @@ export class AuthRepository {
       const user = await transaction.user.create({
         data: {
           id: input.userId, firstName: input.firstName, lastName: input.lastName, email: input.email,
-          emailNormalized: input.emailNormalized, passwordHash: input.passwordHash,
+          emailNormalized: input.emailNormalized, passwordHash: input.passwordHash, avatarUrl: input.avatarUrl,
         },
         select: authUserSelect,
       });

@@ -7,6 +7,7 @@ import type { AuthResult, ClientMetadata, LoginInput, PublicUser, RegisterInput 
 import type { AuthRepository, AuthUserRecord, NewSession } from "./auth.repository.js";
 import { hashPassword, verifyPassword } from "./password.service.js";
 import type { TokenService } from "./token.service.js";
+import { avatarForUser } from "./avatar.service.js";
 
 export class AuthService {
   constructor(readonly repository: AuthRepository, readonly tokens: TokenService) {}
@@ -18,7 +19,7 @@ export class AuthService {
       const user = await this.repository.createUserAndSession({
         id: sessionId, userId, familyId, tokenHash: this.tokens.hashToken(issued.refreshToken), expiresAt: issued.refreshExpiresAt,
         firstName: input.firstName.trim(), lastName: input.lastName.trim(), email: input.email.trim(),
-        emailNormalized: normalizeEmail(input.email), passwordHash: await hashPassword(input.password), ...this.hashMetadata(metadata),
+        emailNormalized: normalizeEmail(input.email), passwordHash: await hashPassword(input.password), avatarUrl: avatarForUser(userId), ...this.hashMetadata(metadata),
       });
       return { user: toPublicUser(user), tokens: issued };
     } catch (error) {
