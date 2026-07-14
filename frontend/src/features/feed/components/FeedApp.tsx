@@ -20,29 +20,9 @@ import type { User } from "@/features/auth/types";
 import { feedKeys, feedRepository } from "../repository";
 import type { Comment, FeedUser, Liker, Page, Post, Visibility } from "../types";
 import { uploadPostImage } from "../upload";
+import { FeedReferenceIcon, type FeedReferenceIconName } from "./FeedReferenceIcon";
 
-type IconName =
-  | "bell"
-  | "bookmark"
-  | "calendar"
-  | "chevron"
-  | "comment"
-  | "compass"
-  | "dots"
-  | "event"
-  | "friends"
-  | "heart"
-  | "home"
-  | "image"
-  | "menu"
-  | "message"
-  | "moon"
-  | "play"
-  | "search"
-  | "send"
-  | "share"
-  | "sun"
-  | "users";
+type OpenOverlay = { kind: "notifications" | "profile" } | { kind: "post"; id: string };
 
 const fullName = (user: Pick<User, "firstName" | "lastName">) => `${user.firstName} ${user.lastName}`;
 
@@ -70,43 +50,6 @@ export function prependPostToFeed(
   return { ...data, pages };
 }
 
-function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
-  const common = {
-    width: size,
-    height: size,
-    viewBox: "0 0 24 24",
-    fill: "none",
-    stroke: "currentColor",
-    strokeWidth: 1.7,
-    strokeLinecap: "round" as const,
-    strokeLinejoin: "round" as const,
-    "aria-hidden": true,
-  };
-
-  switch (name) {
-    case "home": return <svg {...common}><path d="m3 10 9-8 9 8v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" /><path d="M9 22V12h6v10" /></svg>;
-    case "friends": return <svg {...common}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" /></svg>;
-    case "bell": return <svg {...common}><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" /></svg>;
-    case "message": return <svg {...common}><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4Z" /><path d="M8 9h8M8 13h5" /></svg>;
-    case "search": return <svg {...common}><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg>;
-    case "chevron": return <svg {...common}><path d="m7 10 5 5 5-5" /></svg>;
-    case "sun": return <svg {...common}><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.42-1.41M17.66 6.34l1.41-1.41" /></svg>;
-    case "moon": return <svg {...common}><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z" /></svg>;
-    case "users": return <svg {...common}><circle cx="9" cy="8" r="3" /><path d="M3 20v-2a6 6 0 0 1 12 0v2M16 5a3 3 0 0 1 0 6M18 14a5 5 0 0 1 3 4.58V20" /></svg>;
-    case "calendar": return <svg {...common}><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M16 3v4M8 3v4M3 11h18" /></svg>;
-    case "bookmark": return <svg {...common}><path d="M6 3h12v18l-6-4-6 4Z" /></svg>;
-    case "compass": return <svg {...common}><circle cx="12" cy="12" r="9" /><path d="m16 8-2.5 5.5L8 16l2.5-5.5Z" /></svg>;
-    case "event": return <svg {...common}><path d="M4 5h16v16H4zM8 3v4M16 3v4M4 10h16" /></svg>;
-    case "image": return <svg {...common}><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><path d="m21 15-5-5L5 21" /></svg>;
-    case "play": return <svg {...common}><path d="m8 5 11 7-11 7Z" /></svg>;
-    case "send": return <svg {...common}><path d="m22 2-7 20-4-9-9-4Z" /><path d="M22 2 11 13" /></svg>;
-    case "heart": return <svg {...common}><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78L12 21.23l7.78-7.78a5.5 5.5 0 0 0 0-7.78Z" /></svg>;
-    case "comment": return <svg {...common}><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4Z" /></svg>;
-    case "share": return <svg {...common}><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><path d="m8.6 10.5 6.8-4M8.6 13.5l6.8 4" /></svg>;
-    case "dots": return <svg {...common}><circle cx="5" cy="12" r="1" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" /><circle cx="19" cy="12" r="1" fill="currentColor" stroke="none" /></svg>;
-    case "menu": return <svg {...common}><path d="M4 6h16M4 12h16M4 18h16" /></svg>;
-  }
-}
 
 function Avatar({ user, size = 42, className = "" }: { user: FeedUser; size?: number; className?: string }) {
   return user.avatarUrl
@@ -138,14 +81,48 @@ function ThemeToggle() {
     localStorage.setItem("buddy-theme", next ? "dark" : "light");
   };
 
-  return <button type="button" className="feed-theme-toggle" role="switch" aria-checked={dark} aria-label="Use dark theme" onClick={toggle}><span><Icon name="sun" size={15} /></span><i className={dark ? "is-dark" : ""} /><span><Icon name="moon" size={14} /></span></button>;
+  return <button type="button" className="feed-theme-toggle" role="switch" aria-checked={dark} aria-label="Use dark theme" onClick={toggle}><span><FeedReferenceIcon name="sun" /></span><i className={dark ? "is-dark" : ""} /><span><FeedReferenceIcon name="moon" /></span></button>;
 }
 
-function Header({ user }: { user: FeedUser }) {
+const notifications = [
+  { image: "friend-req.png", body: <><strong>Steve Jobs</strong> posted a link in your timeline.</> },
+  { image: "profile-1.png", body: <>An admin changed the name of the group <strong>Freelacer usa</strong> to <strong>Freelacer usa</strong></> },
+  { image: "friend-req.png", body: <><strong>Steve Jobs</strong> posted a link in your timeline.</> },
+  { image: "profile-1.png", body: <>An admin changed the name of the group <strong>Freelacer usa</strong> to <strong>Freelacer usa</strong></> },
+  { image: "friend-req.png", body: <><strong>Steve Jobs</strong> posted a link in your timeline.</> },
+  { image: "profile-1.png", body: <>An admin changed the name of the group <strong>Freelacer usa</strong> to <strong>Freelacer usa</strong></> },
+];
+
+function ProfileDropdown({ user, logout }: { user: FeedUser; logout: () => Promise<void> }) {
+  const rows: Array<{ label: string; icon: FeedReferenceIconName; action?: () => Promise<void> }> = [
+    { label: "Settings", icon: "profileSettings" },
+    { label: "Help & Support", icon: "help" },
+    { label: "Log Out", icon: "logout", action: logout },
+  ];
+  return <div className="feed-profile-dropdown" role="menu" aria-label="Profile menu">
+    <div className="feed-profile-dropdown-info"><Avatar user={user} size={54} /><span><strong>{fullName(user)}</strong><DisabledButton label="View Profile">View Profile</DisabledButton></span></div>
+    <hr />
+    <div className="feed-profile-dropdown-list">{rows.map((row) => row.action
+      ? <button type="button" role="menuitem" key={row.label} onClick={() => void row.action?.()}><span><i><FeedReferenceIcon name={row.icon} /></i>{row.label}</span><FeedReferenceIcon name="chevronRight" /></button>
+      : <DisabledButton className="feed-profile-dropdown-row" label={row.label} key={row.label}><span><i><FeedReferenceIcon name={row.icon} /></i>{row.label}</span><FeedReferenceIcon name="chevronRight" /></DisabledButton>)}</div>
+  </div>;
+}
+
+function NotificationDropdown() {
+  const [optionsOpen, setOptionsOpen] = useState(false);
+  return <section className="feed-notification-dropdown" aria-label="Notifications panel">
+    <header><h2>Notifications</h2><div className="feed-notification-options"><button type="button" aria-label="Notification options" aria-expanded={optionsOpen} onClick={() => setOptionsOpen((open) => !open)}><FeedReferenceIcon name="moreVertical" /></button>{optionsOpen && <div role="menu">{["Mark as all read", "Notifivations seetings", "Open Notifications"].map((label) => <DisabledButton label={label} key={label}>{label}</DisabledButton>)}</div>}</div></header>
+    <div className="feed-notification-filters"><DisabledButton className="is-active" label="Show all notifications">All</DisabledButton><DisabledButton label="Show unread notifications">Unread</DisabledButton></div>
+    <div className="feed-notification-list">{notifications.map((notification, index) => <article key={`${notification.image}-${index}`}><Image src={`/assets/${notification.image}`} alt="" width={56} height={56} /><div><p>{notification.body}</p><time>42 miniutes ago</time></div></article>)}</div>
+  </section>;
+}
+
+function Header({ user, overlay, setOverlay }: { user: FeedUser; overlay?: OpenOverlay; setOverlay: (overlay?: OpenOverlay) => void }) {
   const auth = useAuth();
   const router = useRouter();
-  const [profileOpen, setProfileOpen] = useState(false);
   const [mobileSearch, setMobileSearch] = useState(false);
+  const profileOpen = overlay?.kind === "profile";
+  const notificationsOpen = overlay?.kind === "notifications";
 
   const logout = async () => {
     await auth.logout();
@@ -156,16 +133,19 @@ function Header({ user }: { user: FeedUser }) {
     <header className="feed-header feed-desktop-header">
       <div className="feed-container feed-header-inner">
         <Image className="feed-logo" src="/assets/logo.svg" alt="BuddyScript" width={170} height={40} priority />
-        <label className="feed-header-search"><Icon name="search" size={17} /><input type="search" placeholder="Input search text" aria-label="Search" /></label>
+        <label className="feed-header-search"><FeedReferenceIcon name="search" /><input type="search" placeholder="input search text" aria-label="Search" /></label>
         <nav className="feed-primary-nav" aria-label="Primary navigation">
-          <DisabledButton className="is-active" label="Home"><Icon name="home" /></DisabledButton>
-          <DisabledButton label="Community"><Icon name="friends" /></DisabledButton>
-          <DisabledButton label="Notifications"><Icon name="bell" /><b>6</b></DisabledButton>
-          <DisabledButton label="Messages"><Icon name="message" /><b>2</b></DisabledButton>
+          <DisabledButton className="is-active" label="Home"><FeedReferenceIcon name="home" /></DisabledButton>
+          <DisabledButton label="Friends"><FeedReferenceIcon name="friends" /></DisabledButton>
+          <div className="feed-header-overlay-root" data-feed-overlay-root>
+            <button type="button" aria-label="Notifications" aria-expanded={notificationsOpen} onClick={() => setOverlay(notificationsOpen ? undefined : { kind: "notifications" })}><FeedReferenceIcon name="bell" /><b>6</b></button>
+            {notificationsOpen && <NotificationDropdown />}
+          </div>
+          <DisabledButton label="Messages"><FeedReferenceIcon name="message" /><b>2</b></DisabledButton>
         </nav>
-        <div className="feed-profile-menu">
-          <button type="button" onClick={() => setProfileOpen((value) => !value)} aria-expanded={profileOpen}><Avatar user={user} size={32} /><span>{user.firstName}</span><Icon name="chevron" size={15} /></button>
-          {profileOpen && <div className="feed-profile-dropdown"><div><Avatar user={user} size={48} /><span><strong>{fullName(user)}</strong><small>BuddyScript member</small></span></div><button type="button" onClick={logout}>Log out</button></div>}
+        <div className="feed-profile-menu" data-feed-overlay-root>
+          <button type="button" onClick={() => setOverlay(profileOpen ? undefined : { kind: "profile" })} aria-label="Open profile menu" aria-expanded={profileOpen}><Avatar user={user} size={24} /><span>{fullName(user)}</span><FeedReferenceIcon name="chevron" /></button>
+          {profileOpen && <ProfileDropdown user={user} logout={logout} />}
         </div>
       </div>
     </header>
@@ -173,62 +153,63 @@ function Header({ user }: { user: FeedUser }) {
       <div className="feed-mobile-header-row">
         <Image className="feed-logo" src="/assets/logo.svg" alt="BuddyScript" width={155} height={36} priority />
         <div>
-          <button type="button" aria-label="Toggle search" onClick={() => setMobileSearch((value) => !value)}><Icon name="search" /></button>
-          <DisabledButton label="Open menu"><Icon name="menu" /></DisabledButton>
-          <button type="button" className="feed-mobile-avatar" onClick={() => setProfileOpen((value) => !value)} aria-label="Open profile menu"><Avatar user={user} size={34} /></button>
+          <button type="button" aria-label="Toggle search" onClick={() => setMobileSearch((value) => !value)}><FeedReferenceIcon name="search" /></button>
+          <DisabledButton label="Open menu"><FeedReferenceIcon name="menu" /></DisabledButton>
+          <button type="button" className="feed-mobile-avatar" data-feed-overlay-root onClick={() => setOverlay(profileOpen ? undefined : { kind: "profile" })} aria-label="Open profile menu"><Avatar user={user} size={34} /></button>
         </div>
       </div>
-      {mobileSearch && <label className="feed-mobile-search"><Icon name="search" size={16} /><input autoFocus type="search" placeholder="Input search text" aria-label="Search" /></label>}
-      {profileOpen && <div className="feed-mobile-profile-dropdown"><strong>{fullName(user)}</strong><button type="button" onClick={logout}>Log out</button></div>}
+      {mobileSearch && <label className="feed-mobile-search"><FeedReferenceIcon name="search" /><input autoFocus type="search" placeholder="input search text" aria-label="Search" /></label>}
+      {profileOpen && <div className="feed-mobile-profile-dropdown" data-feed-overlay-root><ProfileDropdown user={user} logout={logout} /></div>}
     </header>
   </>;
 }
 
-const exploreItems: Array<{ icon: IconName; label: string; count?: number }> = [
-  { icon: "compass", label: "Feed" },
-  { icon: "users", label: "My community", count: 12 },
-  { icon: "message", label: "Messages", count: 2 },
-  { icon: "bell", label: "Notifications", count: 6 },
-  { icon: "calendar", label: "Explore" },
-  { icon: "bookmark", label: "Saved posts" },
+const exploreItems: Array<{ icon: FeedReferenceIconName; label: string; isNew?: boolean }> = [
+  { icon: "learning", label: "Learning", isNew: true },
+  { icon: "insights", label: "Insights" },
+  { icon: "findFriends", label: "Find friends" },
+  { icon: "bookmark", label: "Bookmarks" },
+  { icon: "group", label: "Group" },
+  { icon: "gaming", label: "Gaming", isNew: true },
+  { icon: "settings", label: "Settings" },
+  { icon: "save", label: "Save post" },
 ];
 
 const suggestedPeople = [
+  { name: "Steve Jobs", role: "CEO of Apple", asset: "people1.png" },
   { name: "Ryan Roslansky", role: "CEO of LinkedIn", asset: "people2.png" },
   { name: "Dylan Field", role: "CEO of Figma", asset: "people3.png" },
-  { name: "Radovan SkillArena", role: "Founder & CEO", asset: "Avatar.png" },
 ];
 
 function LeftSidebar() {
   return <aside className="feed-left-sidebar" data-feed-region="left" aria-label="Explore BuddyScript">
     <section className="feed-side-card feed-explore-card">
       <h2>Explore</h2>
-      <nav>{exploreItems.map(({ icon, label, count }, index) => <DisabledButton key={label} className={index === 0 ? "is-active" : ""} label={label}><span><Icon name={icon} size={19} />{label}</span>{count !== undefined && <b>{count}</b>}</DisabledButton>)}</nav>
+      <nav>{exploreItems.map(({ icon, label, isNew }) => <DisabledButton key={label} label={label}><span><FeedReferenceIcon name={icon} />{label}</span>{isNew && <b>New</b>}</DisabledButton>)}</nav>
     </section>
     <section className="feed-side-card feed-suggest-card">
       <div className="feed-section-title"><h2>Suggested People</h2><DisabledButton label="See all suggested people">See All</DisabledButton></div>
-      {suggestedPeople.map((person) => <div className="feed-person" key={person.name}><Image src={`/assets/${person.asset}`} alt="" width={40} height={40} /><span><strong>{person.name}</strong><small>{person.role}</small></span><DisabledButton label={`Follow ${person.name}`}>Follow</DisabledButton></div>)}
+      {suggestedPeople.map((person) => <div className="feed-person" key={person.name}><Image src={`/assets/${person.asset}`} alt="" width={40} height={40} /><span><strong>{person.name}</strong><small>{person.role}</small></span><DisabledButton label={`Connect with ${person.name}`}>Connect</DisabledButton></div>)}
     </section>
     <section className="feed-side-card feed-event-card">
       <div className="feed-section-title"><h2>Events</h2><DisabledButton label="See all events">See All</DisabledButton></div>
-      <Image src="/assets/feed_event1.png" alt="People at a design systems meetup" width={300} height={180} />
-      <div className="feed-event-copy"><time dateTime="2026-07-18"><b>18</b>Jul</time><span><strong>Design systems meetup</strong><small>Saturday at 7:00 PM</small></span></div>
+      {[0, 1].map((event) => <div className="feed-event-item" key={event}><Image src="/assets/feed_event1.png" alt="People at an event" width={300} height={180} /><div className="feed-event-copy"><time dateTime="2026-07-10"><b>10</b>Jul</time><strong>No more terrorism no more cry</strong></div><hr /><div className="feed-event-footer"><span>17 People Going</span><DisabledButton label="Mark event as going">Going</DisabledButton></div></div>)}
     </section>
   </aside>;
 }
 
 const stories = [
-  { name: "Karim", asset: "card_ppl2.png" },
-  { name: "Dylan", asset: "card_ppl3.png" },
-  { name: "Ryan", asset: "card_ppl4.png" },
+  { name: "Ryan Roslansky", asset: "card_ppl2.png" },
+  { name: "Ryan Roslansky", asset: "card_ppl3.png" },
+  { name: "Ryan Roslansky", asset: "card_ppl4.png" },
 ];
 
 function Stories({ user }: { user: FeedUser }) {
   return <>
     <section className="feed-stories" aria-label="Stories">
-      <DisabledButton className="feed-story feed-story-create" label="Create story"><Image src="/assets/card_ppl1.png" alt="" fill sizes="150px" /><span>+</span><small>Your Story</small></DisabledButton>
-      {stories.map((story) => <DisabledButton className="feed-story" key={story.asset} label={`${story.name}'s story`}><Image src={`/assets/${story.asset}`} alt="" fill sizes="150px" /><small>{story.name}</small></DisabledButton>)}
-      <DisabledButton className="feed-story-next" label="Show more stories"><Icon name="chevron" size={18} /></DisabledButton>
+      <DisabledButton className="feed-story feed-story-create" label="Create story"><Image src="/assets/card_ppl1.png" alt="" fill sizes="150px" priority /><span>+</span><small>Your Story</small></DisabledButton>
+      {stories.map((story) => <DisabledButton className="feed-story" key={story.asset} label={`${story.name}'s story`}><Image src={`/assets/${story.asset}`} alt="" fill sizes="150px" /><Image className="feed-story-owner" src="/assets/mini_pic.png" alt="" width={30} height={30} /><small>{story.name}</small></DisabledButton>)}
+      <DisabledButton className="feed-story-next" label="Show more stories"><span>→</span></DisabledButton>
     </section>
     <section className="feed-mobile-stories" aria-label="Stories">
       <DisabledButton className="feed-mobile-story is-create" label="Create story"><span><Avatar user={user} size={56} /><i>+</i></span><small>Your Story</small></DisabledButton>
@@ -286,16 +267,17 @@ function Composer({ user }: { user: FeedUser }) {
   };
 
   return <section className="feed-composer" aria-label="Create a post">
-    <div className="feed-composer-top"><Avatar user={user} size={44} /><textarea value={body} onChange={(event) => setBody(event.target.value)} placeholder="Write something ..." aria-label="Post text" maxLength={5000} /></div>
+    <div className="feed-composer-top"><Avatar user={user} size={44} /><textarea value={body} onChange={(event) => setBody(event.target.value)} placeholder="Write something ..." aria-label="Post text" maxLength={5000} /><FeedReferenceIcon name="pencil" /></div>
     {preview && <div className="feed-image-preview"><Image src={preview} alt="Selected post preview" width={700} height={400} unoptimized /><button type="button" aria-label="Remove selected image" onClick={() => { URL.revokeObjectURL(preview); setPreview(undefined); setFile(undefined); }}>×</button></div>}
     <div className="feed-composer-bottom">
       <div className="feed-composer-tools">
-        <label htmlFor={inputId}><Icon name="image" size={18} /><span>Photo</span><input id={inputId} hidden type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => choose(event.target.files?.[0])} /></label>
-        <DisabledButton label="Add video"><Icon name="play" size={17} /><span>Video</span></DisabledButton>
-        <DisabledButton label="Add event"><Icon name="event" size={17} /><span>Event</span></DisabledButton>
+        <label htmlFor={inputId} role="button" tabIndex={0} aria-label="Add photo" onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") document.getElementById(inputId)?.click(); }}><FeedReferenceIcon name="image" /><span>Photo</span><input id={inputId} hidden type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => choose(event.target.files?.[0])} /></label>
+        <DisabledButton label="Add video"><FeedReferenceIcon name="video" /><span>Video</span></DisabledButton>
+        <DisabledButton label="Add event"><FeedReferenceIcon name="event" /><span>Event</span></DisabledButton>
+        <DisabledButton label="Add article"><FeedReferenceIcon name="article" /><span>Article</span></DisabledButton>
       </div>
       <label className="feed-visibility"><span className="sr-only">Post visibility</span><select value={visibility} onChange={(event) => setVisibility(event.target.value as Visibility)}><option value="public">Public</option><option value="private">Private</option></select></label>
-      <button className="feed-post-button" type="button" disabled={mutation.isPending || (!body.trim() && !file)} onClick={() => mutation.mutate()}><Icon name="send" size={16} /><span>{mutation.isPending ? file && progress < 100 ? `${progress}%` : "Posting" : "Post"}</span></button>
+      <button className="feed-post-button" type="button" aria-label="Post" disabled={mutation.isPending || (!body.trim() && !file)} onClick={() => mutation.mutate()}><FeedReferenceIcon name="post" /><span>{mutation.isPending ? file && progress < 100 ? `${progress}%` : "Posting" : "Post"}</span></button>
     </div>
     {mutation.isPending && <button className="feed-cancel-upload" type="button" onClick={() => abortRef.current?.abort()}>Cancel</button>}
     {error && <p className="feed-composer-error" role="alert">{error}</p>}
@@ -322,7 +304,7 @@ function CommentForm({ placeholder, submit }: { placeholder: string; submit: (bo
     }
   };
 
-  return <form className="feed-comment-form" onSubmit={onSubmit}><input value={body} onChange={(event) => setBody(event.target.value)} placeholder={placeholder} aria-label={placeholder} /><button disabled={pending || !body.trim()} aria-label="Post comment"><Icon name="send" size={17} /></button>{error && <small role="alert">{error}</small>}</form>;
+  return <form className="feed-comment-form" onSubmit={onSubmit}><input value={body} onChange={(event) => setBody(event.target.value)} placeholder={placeholder} aria-label={placeholder} /><div className="feed-comment-extras" aria-hidden="true"><FeedReferenceIcon name="microphone" /><FeedReferenceIcon name="image" /></div><button disabled={pending || !body.trim()} aria-label="Post comment"><FeedReferenceIcon name="post" /></button>{error && <small role="alert">{error}</small>}</form>;
 }
 
 function CommentItem({ comment, showLikers }: { comment: Comment; showLikers: (commentId: string) => void }) {
@@ -345,8 +327,16 @@ function CommentItem({ comment, showLikers }: { comment: Comment; showLikers: (c
     setReplying(false);
   };
 
-  return <div className={`feed-comment ${comment.depth ? "is-reply" : ""}`}><Avatar user={comment.author} size={36} /><div className="feed-comment-content"><div className="feed-comment-bubble"><strong>{fullName(comment.author)}</strong><p>{comment.body}</p></div><div className="feed-comment-actions"><button type="button" className={comment.engagement.likedByViewer ? "is-liked" : ""} onClick={() => reaction.mutate()}>{comment.engagement.likedByViewer ? "Unlike" : "Like"}</button>{comment.depth === 0 && <button type="button" onClick={() => setReplying((value) => !value)}>Reply</button>}<span>{relativeTime(comment.createdAt)}</span><button type="button" onClick={() => showLikers(comment.id)}><Icon name="heart" size={12} /> {comment.engagement.likeCount}</button></div>{comment.depth === 0 && <>{replies.data?.pages.flatMap((page) => page.items).map((reply) => <CommentItem key={reply.id} comment={reply} showLikers={showLikers} />)}{replies.hasNextPage && <button className="feed-inline-button" type="button" onClick={() => replies.fetchNextPage()}>Load more replies</button>}{replying && <CommentForm placeholder={`Reply to ${comment.author.firstName}…`} submit={add} />}</>}</div></div>;
+  return <div className={`feed-comment ${comment.depth ? "is-reply" : ""}`}><Avatar user={comment.author} size={36} /><div className="feed-comment-content"><div className="feed-comment-bubble"><strong>{fullName(comment.author)}</strong><p>{comment.body}</p></div><div className="feed-comment-actions"><button type="button" className={comment.engagement.likedByViewer ? "is-liked" : ""} onClick={() => reaction.mutate()}>{comment.engagement.likedByViewer ? "Unlike" : "Like"}</button>{comment.depth === 0 && <button type="button" onClick={() => setReplying((value) => !value)}>Reply</button>}<span>{relativeTime(comment.createdAt)}</span><button type="button" onClick={() => showLikers(comment.id)}><span aria-hidden="true">♥</span> {comment.engagement.likeCount}</button></div>{comment.depth === 0 && <>{replies.data?.pages.flatMap((page) => page.items).map((reply) => <CommentItem key={reply.id} comment={reply} showLikers={showLikers} />)}{replies.hasNextPage && <button className="feed-inline-button" type="button" onClick={() => replies.fetchNextPage()}>Load more replies</button>}{replying && <CommentForm placeholder={`Reply to ${comment.author.firstName}…`} submit={add} />}</>}</div></div>;
 }
+
+const postMenuItems: Array<{ label: string; icon: FeedReferenceIconName }> = [
+  { label: "Save Post", icon: "postSave" },
+  { label: "Turn On Notification", icon: "bell" },
+  { label: "Hide", icon: "hide" },
+  { label: "Edit Post", icon: "edit" },
+  { label: "Delete Post", icon: "delete" },
+];
 
 function Comments({ post, user, showLikers }: { post: Post; user: FeedUser; showLikers: (commentId: string) => void }) {
   const client = useQueryClient();
@@ -392,7 +382,7 @@ function LikersDialog({ target, close }: { target: { kind: "post" | "comment"; i
   return <dialog ref={ref} className="feed-likers-dialog" onClose={close}><div className="feed-dialog-title"><h2>Liked by</h2><button type="button" onClick={() => ref.current?.close()} aria-label="Close">×</button></div>{query.isLoading ? <p>Loading…</p> : users.length ? <ul>{users.map((user) => <li key={`${user.id}-${user.likedAt}`}><Avatar user={user} /><span><strong>{fullName(user)}</strong><small>BuddyScript member</small></span></li>)}</ul> : <p>No likes yet.</p>}{query.hasNextPage && <button className="feed-inline-button" onClick={() => query.fetchNextPage()}>Load more</button>}</dialog>;
 }
 
-function PostCard({ post, user, showLikers, showCommentLikers }: { post: Post; user: FeedUser; showLikers: () => void; showCommentLikers: (commentId: string) => void }) {
+function PostCard({ post, user, showLikers, showCommentLikers, menuOpen, setOverlay }: { post: Post; user: FeedUser; showLikers: () => void; showCommentLikers: (commentId: string) => void; menuOpen: boolean; setOverlay: (overlay?: OpenOverlay) => void }) {
   const client = useQueryClient();
   const mutation = useMutation({
     mutationFn: () => feedRepository.setPostLike(post.id, !post.engagement.likedByViewer),
@@ -420,11 +410,11 @@ function PostCard({ post, user, showLikers, showCommentLikers }: { post: Post; u
   });
 
   return <article className="feed-post-card">
-    <header className="feed-post-head"><Avatar user={post.author} size={44} /><div><h2>{fullName(post.author)}</h2><p>{relativeTime(post.createdAt)} · {post.visibility === "public" ? "Public" : "Private"}</p></div><DisabledButton label="Post menu"><Icon name="dots" /></DisabledButton></header>
+    <header className="feed-post-head"><Avatar user={post.author} size={44} /><div><h2>{fullName(post.author)}</h2><p>{relativeTime(post.createdAt)} · {post.visibility === "public" ? "Public" : "Private"}</p></div><div className="feed-post-menu-root" data-feed-overlay-root><button type="button" aria-label="Post menu" aria-expanded={menuOpen} onClick={() => setOverlay(menuOpen ? undefined : { kind: "post", id: post.id })}><FeedReferenceIcon name="moreVertical" /></button>{menuOpen && <div className="feed-post-menu" role="menu">{postMenuItems.map((item) => <DisabledButton className="feed-post-menu-item" label={item.label} key={item.label}><FeedReferenceIcon name={item.icon} />{item.label}</DisabledButton>)}</div>}</div></header>
     {post.body && <p className="feed-post-body">{post.body}</p>}
     {post.image && <div className="feed-post-image"><Image src={post.image.secureUrl} alt="Image shared with this post" width={post.image.width} height={post.image.height} sizes="(max-width: 991px) 100vw, 636px" /></div>}
-    <div className="feed-post-stats"><button type="button" onClick={showLikers}><span><Icon name="heart" size={12} /></span>{post.engagement.likeCount} {post.engagement.likeCount === 1 ? "person" : "people"}</button><span>{post.engagement.commentCount} Comments</span></div>
-    <div className="feed-post-actions"><button type="button" disabled={mutation.isPending} className={post.engagement.likedByViewer ? "is-liked" : ""} onClick={() => mutation.mutate()}><Icon name="heart" size={18} />{post.engagement.likedByViewer ? "Unlike" : "Like"}</button><button type="button" onClick={() => document.getElementById(`comment-${post.id}`)?.focus()}><Icon name="comment" size={18} />Comment</button><DisabledButton label="Share post"><Icon name="share" size={18} />Share</DisabledButton></div>
+    <div className="feed-post-stats"><button type="button" onClick={showLikers}><span className="feed-reaction-stack">{[1, 2, 3, 4, 5].map((asset) => <Image key={asset} src={`/assets/react_img${asset}.png`} alt="" width={24} height={24} />)}</span><strong>{post.engagement.likeCount}</strong></button><div><span>{post.engagement.commentCount} Comment</span><span>0 Share</span></div></div>
+    <div className="feed-post-actions"><button type="button" disabled={mutation.isPending} className={post.engagement.likedByViewer ? "is-liked" : ""} onClick={() => mutation.mutate()}><FeedReferenceIcon name="reaction" />{post.engagement.likedByViewer ? "Unlike" : "Like"}</button><button type="button" onClick={() => document.getElementById(`comment-${post.id}`)?.focus()}><FeedReferenceIcon name="comment" />Comment</button><DisabledButton label="Share post"><FeedReferenceIcon name="share" />Share</DisabledButton></div>
     <div id={`comment-${post.id}`} tabIndex={-1}><Comments post={post} user={user} showLikers={showCommentLikers} /></div>
   </article>;
 }
@@ -438,24 +428,27 @@ function RightSidebar() {
     </section>
     <section className="feed-side-card feed-friends-card">
       <div className="feed-section-title"><h2>Your Friends</h2><DisabledButton label="See all friends">See All</DisabledButton></div>
-      <label className="feed-friend-search"><Icon name="search" size={16} /><input type="search" placeholder="input search text" aria-label="Search friends" /></label>
+      <label className="feed-friend-search"><FeedReferenceIcon name="search" /><input type="search" placeholder="input search text" aria-label="Search friends" /></label>
       <div className="feed-friend-list">{[
         { name: "Steve Jobs", role: "CEO of Apple", asset: "people1.png", offline: true },
         { name: "Ryan Roslansky", role: "CEO of Linkedin", asset: "people2.png" },
         { name: "Dylan Field", role: "CEO of Figma", asset: "people3.png" },
-        { name: "Karim Ahmed", role: "Product Designer", asset: "Avatar.png" },
-      ].map((friend) => <div className="feed-friend-row" key={friend.name}><Image src={`/assets/${friend.asset}`} alt="" width={42} height={42} /><span><strong>{friend.name}</strong><small>{friend.role}</small></span>{friend.offline ? <time>5m</time> : <i aria-label="Online" />}</div>)}</div>
+        { name: "Steve Jobs", role: "CEO of Apple", asset: "people1.png", offline: true },
+        { name: "Ryan Roslansky", role: "CEO of Linkedin", asset: "people2.png" },
+        { name: "Dylan Field", role: "CEO of Figma", asset: "people3.png" },
+      ].map((friend, index) => <div className="feed-friend-row" key={`${friend.name}-${index}`}><Image src={`/assets/${friend.asset}`} alt="" width={42} height={42} /><span><strong>{friend.name}</strong><small>{friend.role}</small></span>{friend.offline ? <time>5 minute ago</time> : <i aria-label="Online" />}</div>)}</div>
     </section>
   </aside>;
 }
 
 function MobileNavigation() {
-  return <nav className="feed-mobile-navigation" aria-label="Mobile navigation"><DisabledButton className="is-active" label="Home"><Icon name="home" /></DisabledButton><DisabledButton label="Community"><Icon name="friends" /></DisabledButton><DisabledButton label="Notifications"><Icon name="bell" /><b>6</b></DisabledButton><DisabledButton label="Messages"><Icon name="message" /><b>2</b></DisabledButton></nav>;
+  return <nav className="feed-mobile-navigation" aria-label="Mobile navigation"><DisabledButton className="is-active" label="Home"><FeedReferenceIcon name="home" /></DisabledButton><DisabledButton label="Friends"><FeedReferenceIcon name="friends" /></DisabledButton><DisabledButton label="Notifications"><FeedReferenceIcon name="bell" /><b>6</b></DisabledButton><DisabledButton label="Messages"><FeedReferenceIcon name="message" /><b>2</b></DisabledButton></nav>;
 }
 
 export function FeedApp() {
   const auth = useAuth();
   const [likers, setLikers] = useState<{ kind: "post" | "comment"; id: string }>();
+  const [overlay, setOverlay] = useState<OpenOverlay>();
   const query = useInfiniteQuery({
     queryKey: feedKeys.all,
     queryFn: ({ pageParam }) => feedRepository.list(pageParam),
@@ -466,11 +459,24 @@ export function FeedApp() {
   const posts = Array.from(new Map((query.data?.pages.flatMap((page) => page.items) ?? []).map((post) => [post.id, post])).values());
   const refresh = () => { void query.refetch(); };
 
+  useEffect(() => {
+    const closeOnPointer = (event: PointerEvent) => {
+      if (!(event.target instanceof Element) || !event.target.closest("[data-feed-overlay-root]")) setOverlay(undefined);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") setOverlay(undefined); };
+    document.addEventListener("pointerdown", closeOnPointer);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnPointer);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, []);
+
   if (auth.status !== "authenticated") return null;
 
   return <div className="feed-app">
     <ThemeToggle />
-    <Header user={auth.user} />
+    <Header user={auth.user} overlay={overlay} setOverlay={setOverlay} />
     <div className="feed-container feed-shell">
       <LeftSidebar />
       <main className="feed-main" data-feed-region="main">
@@ -479,7 +485,7 @@ export function FeedApp() {
         {query.isError && posts.length > 0 && <div className="feed-refresh-warning" role="status"><span>Some posts may be out of date.</span><button type="button" onClick={refresh}>Refresh</button></div>}
         {query.isPending && posts.length === 0 ? <div className="feed-loading" aria-label="Loading your feed"><span /><span /><span /><p>Loading your feed…</p></div>
           : query.isError && posts.length === 0 ? <div className="feed-error" role="alert"><p>We could not load your feed.</p><button type="button" onClick={refresh}>Try again</button></div>
-            : posts.length ? <>{posts.map((post) => <PostCard key={post.id} post={post} user={auth.user} showLikers={() => setLikers({ kind: "post", id: post.id })} showCommentLikers={(id) => setLikers({ kind: "comment", id })} />)}{query.hasNextPage && <button className="feed-load-more" type="button" onClick={() => query.fetchNextPage()} disabled={query.isFetchingNextPage}>{query.isFetchingNextPage ? "Loading…" : "Load more posts"}</button>}</>
+            : posts.length ? <>{posts.map((post) => <PostCard key={post.id} post={post} user={auth.user} menuOpen={overlay?.kind === "post" && overlay.id === post.id} setOverlay={setOverlay} showLikers={() => setLikers({ kind: "post", id: post.id })} showCommentLikers={(id) => setLikers({ kind: "comment", id })} />)}{query.hasNextPage && <button className="feed-load-more" type="button" onClick={() => query.fetchNextPage()} disabled={query.isFetchingNextPage}>{query.isFetchingNextPage ? "Loading…" : "Load more posts"}</button>}</>
               : <div className="feed-empty"><h2>Your feed is quiet</h2><p>Create the first post.</p></div>}
       </main>
       <RightSidebar />

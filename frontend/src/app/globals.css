@@ -352,3 +352,181 @@ img { max-width: 100%; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+
+/* Exact feed.html parity overrides. These remain isolated beneath .feed-app. */
+.feed-app .feed-header { height: 70px; box-shadow: none; }
+.feed-app .feed-logo { width: 169px; }
+.feed-app .feed-header-search { width: 424px; margin-left: 36px; }
+.feed-app .feed-header-search input { border: 0; font-size: 14px; }
+.feed-app .feed-primary-nav { align-items: stretch; }
+.feed-app .feed-primary-nav > button,
+.feed-app .feed-primary-nav > .feed-header-overlay-root > button { width: auto; min-width: 50px; height: 100%; margin: 0 12px; padding: 22px 16px 26px; display: grid; place-items: center; position: relative; border: 0; background: transparent; }
+.feed-app .feed-primary-nav > .feed-header-overlay-root { height: 100%; position: relative; }
+.feed-app .feed-primary-nav > button::after,
+.feed-app .feed-primary-nav > .feed-header-overlay-root > button::after { content: ""; position: absolute; inset: auto 0 0; height: 2px; background: #00acff; transform: scaleX(0); transition: transform .2s ease; }
+.feed-app .feed-primary-nav > button:hover::after,
+.feed-app .feed-primary-nav > button.is-active::after,
+.feed-app .feed-primary-nav > .feed-header-overlay-root > button:hover::after,
+.feed-app .feed-primary-nav > .feed-header-overlay-root > button[aria-expanded="true"]::after { transform: scaleX(1); }
+.feed-app .feed-primary-nav .is-active [data-reference-icon="home"] path { stroke: #1890ff; stroke-opacity: 1; }
+.feed-app .feed-primary-nav button:hover svg path { fill: #1890ff; fill-opacity: 1; }
+.feed-app .feed-primary-nav button:hover [data-reference-icon="home"] path { fill: none; stroke: #1890ff; stroke-opacity: 1; }
+.feed-app .feed-primary-nav b { top: 16px; right: 10px; font-size: 11px; }
+.feed-app .feed-profile-menu { margin-left: 18px; }
+.feed-app .feed-profile-menu > button { gap: 8px; padding: 0; font-size: 16px; line-height: 24px; }
+.feed-app .feed-profile-menu > button > span { font-size: 16px; white-space: nowrap; }
+.feed-app .feed-profile-dropdown { top: 7px; right: 0; width: 312px; padding: 16px; border: 0; box-shadow: 0 10px 20px rgba(0,0,0,.08); transform: translateY(40px); z-index: 70; }
+.feed-app .feed-profile-dropdown-info { display: flex; align-items: center; gap: 8px; padding: 0; }
+.feed-app .feed-profile-dropdown-info > span { display: flex; flex-direction: column; align-items: flex-start; }
+.feed-app .feed-profile-dropdown-info strong { margin-bottom: 4px; font-size: 16px; line-height: 1.2; }
+.feed-app .feed-profile-dropdown-info button { padding: 0; border: 0; background: transparent; color: #377dff; font-size: 14px; line-height: 1.2; }
+.feed-app .feed-profile-dropdown > hr { margin: 16px 0; border: 0; border-top: 1px solid var(--border); }
+.feed-app .feed-profile-dropdown-list { display: block; padding: 0; }
+.feed-app .feed-profile-dropdown-list > button { width: 100%; min-height: 44px; margin: 0 0 16px; padding: 0; display: flex; align-items: center; justify-content: space-between; border: 0; background: transparent; color: var(--muted); font-size: 16px; font-weight: 500; }
+.feed-app .feed-profile-dropdown-list > button:last-child { margin-bottom: 0; }
+.feed-app .feed-profile-dropdown-list > button > span { display: flex; align-items: center; }
+.feed-app .feed-profile-dropdown-list > button i { width: 42px; height: 42px; margin-right: 8px; display: grid; place-items: center; border-radius: 50%; background: #ebf2ff; color: #377dff; font-style: normal; }
+.feed-app .feed-profile-dropdown-list [data-reference-icon="profileSettings"] { width: 18px; height: 19px; }
+
+.feed-app .feed-notification-dropdown { width: 400px; height: calc(100vh - 90px); padding: 16px; position: absolute; z-index: 70; top: 52px; left: -110px; overflow-y: auto; border-radius: 6px; background: var(--surface); box-shadow: rgba(149,157,165,.2) 0 8px 24px; color: var(--text); text-align: left; }
+.feed-app .feed-notification-dropdown > header { margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; }
+.feed-app .feed-notification-dropdown h2 { margin: 0; font-size: 20px; font-weight: 600; }
+.feed-app .feed-notification-dropdown header button { padding: 4px 10px; border: 0; background: transparent; }
+.feed-app .feed-notification-options { position: relative; }
+.feed-app .feed-notification-options > div { width: 220px; padding: 16px; position: absolute; z-index: 2; top: 28px; right: 0; border-radius: 4px; background: var(--surface); box-shadow: rgba(149,157,165,.2) 0 8px 24px; }
+.feed-app .feed-notification-options > div button { width: 100%; margin-bottom: 10px; padding: 0; display: block; color: var(--muted); font-size: 14px; text-align: left; }
+.feed-app .feed-notification-options > div button:last-child { margin-bottom: 0; }
+.feed-app .feed-notification-filters { display: flex; gap: 10px; }
+.feed-app .feed-notification-filters button { height: 36px; padding: 8px; border: 1px solid #f1f1f1; border-radius: 6px; background: transparent; font-size: 16px; font-weight: 500; }
+.feed-app .feed-notification-filters button.is-active { background: rgba(24,144,255,.15); color: var(--blue); }
+.feed-app .feed-notification-list { margin-top: 20px; }
+.feed-app .feed-notification-list article { margin-bottom: 16px; padding: 6px; display: flex; align-items: center; transition: background .2s ease; }
+.feed-app .feed-notification-list article:hover { background: rgba(102,102,102,.13); }
+.feed-app .feed-notification-list img { flex: 0 0 56px; border-radius: 50%; object-fit: cover; }
+.feed-app .feed-notification-list article > div { margin-left: 12px; }
+.feed-app .feed-notification-list p { margin: 0; font-size: 14px; font-weight: 500; line-height: 1.6; }
+.feed-app .feed-notification-list p strong { color: var(--text); }
+.feed-app .feed-notification-list time { color: var(--blue); font-size: 13px; font-weight: 600; }
+
+.feed-app .feed-theme-toggle { top: 50%; right: 0; width: 66px; height: 32px; padding: 0; flex-direction: row; border-radius: 40px; transform: translateX(17px) rotate(90deg); }
+.feed-app .feed-theme-toggle i { display: block; left: 10px; width: 18px; height: 18px; }
+.feed-app .feed-theme-toggle i.is-dark { transform: translateX(28px); background: #1890ff; }
+.feed-app .feed-theme-toggle span:first-child { display: none; }
+.feed-app .feed-theme-toggle span:last-child { position: absolute; right: 16px; transform: rotate(-90deg); }
+:root[data-theme="dark"] .feed-app .feed-theme-toggle { background: var(--surface); }
+:root[data-theme="dark"] .feed-app .feed-theme-toggle span:first-child { display: grid; position: absolute; left: 8px; transform: rotate(-90deg); }
+:root[data-theme="dark"] .feed-app .feed-theme-toggle span:last-child { display: none; }
+.feed-app .feed-shell { padding-top: 70px; column-gap: 24px; }
+.feed-app .feed-left-sidebar,
+.feed-app .feed-right-sidebar { padding-top: 16px; }
+.feed-app .feed-main { padding-top: 16px; }
+.feed-app .feed-side-card { padding: 24px; }
+.feed-app .feed-explore-card { padding-bottom: 6px; }
+.feed-app .feed-explore-card > h2 { margin-bottom: 24px; font-size: 20px; }
+.feed-app .feed-explore-card nav > button { min-height: 0; margin: 0 0 24px; padding: 0; color: var(--muted); }
+.feed-app .feed-explore-card nav > button > span { gap: 14px; font-size: 16px; line-height: 1.4; }
+.feed-app .feed-explore-card nav > button b { width: 36px; min-width: 36px; height: 24px; border-radius: 8px; font-size: 13px; }
+.feed-app .feed-explore-card nav > button:hover { color: var(--blue); }
+.feed-app .feed-explore-card nav > button:hover svg path { fill: var(--blue); stroke: var(--blue); }
+.feed-app .feed-person { margin-bottom: 24px; }
+.feed-app .feed-person strong { font-size: 13px; }
+.feed-app .feed-person > button { min-width: 67px; padding: 8px; background: transparent; }
+.feed-app .feed-event-card { padding-bottom: 6px; }
+.feed-app .feed-event-item { margin-bottom: 20px; }
+.feed-app .feed-event-item > img { display: block; width: 100%; height: 148px; border-radius: 6px; object-fit: cover; }
+.feed-app .feed-event-copy { margin-top: 12px; align-items: center; }
+.feed-app .feed-event-copy > strong { font-size: 13px; line-height: 1.4; }
+.feed-app .feed-event-item hr { margin: 12px 0; border: 0; border-top: 1px solid var(--border); }
+.feed-app .feed-event-footer { display: flex; align-items: center; justify-content: space-between; font-size: 11px; }
+.feed-app .feed-event-footer button { padding: 0; border: 0; background: transparent; color: var(--blue); font-size: 11px; }
+
+.feed-app .feed-stories { height: 156px; gap: 24px; }
+.feed-app .feed-story { height: 156px; }
+.feed-app .feed-story-create::before { height: 58px; }
+.feed-app .feed-story-create > span { bottom: 40px; }
+.feed-app .feed-story small { bottom: 12px; font-size: 12px; }
+.feed-app .feed-story-owner { inset: 12px 12px auto auto !important; z-index: 3; width: 30px !important; height: 30px !important; border: 2px solid #fff; border-radius: 50%; object-fit: cover; }
+.feed-app .feed-story-next { right: -5px; transform: translateY(-50%); font-size: 13px; }
+
+.feed-app .feed-composer { padding: 24px; }
+.feed-app .feed-composer-top { position: relative; }
+.feed-app .feed-composer-top > svg { margin: 8px 0 0 -12px; color: var(--muted); }
+.feed-app .feed-composer-top textarea { height: 88px; font-size: 16px; }
+.feed-app .feed-composer-bottom { margin-top: 10px; }
+.feed-app .feed-composer-tools { flex: 1; }
+.feed-app .feed-composer-tools > label,
+.feed-app .feed-composer-tools > button { padding: 0 10px; gap: 8px; color: var(--muted); font-size: 16px; line-height: 23px; }
+.feed-app .feed-composer-tools > label { color: var(--muted); }
+.feed-app .feed-composer-tools > label:hover,
+.feed-app .feed-composer-tools > button:hover { color: var(--blue); }
+.feed-app .feed-visibility { margin-left: auto; }
+.feed-app .feed-visibility select { height: 40px; }
+.feed-app .feed-post-button { min-width: 102px; height: 46px; margin-left: 8px; padding: 12px 22px; font-size: 16px; }
+
+.feed-app .feed-post-card { padding-bottom: 24px; overflow: visible; }
+.feed-app .feed-post-head { position: relative; }
+.feed-app .feed-post-head > div:not(.feed-post-menu-root) { flex: 1; }
+.feed-app .feed-post-menu-root { flex: 0 0 auto; position: relative; }
+.feed-app .feed-post-menu-root > button { width: 30px; height: 30px; padding: 5px; display: grid; place-items: center; border: 0; background: transparent; }
+.feed-app .feed-post-menu { width: 312px; padding: 16px; position: absolute; z-index: 30; top: 28px; right: 0; border-radius: 6px; background: var(--surface); box-shadow: 0 10px 20px rgba(0,0,0,.08); }
+.feed-app .feed-post-menu-item { width: 100%; min-height: 42px; margin-bottom: 10px; padding: 0; display: flex; align-items: center; gap: 14px; border: 0; background: transparent; color: var(--muted); font-size: 16px; font-weight: 500; text-align: left; }
+.feed-app .feed-post-menu-item:last-child { margin-bottom: 0; }
+.feed-app .feed-post-menu-item svg { flex: 0 0 22px; color: #1890ff; }
+.feed-app .feed-post-menu-item [data-reference-icon="bell"] path { fill: #377dff; }
+.feed-app .feed-post-body { padding-top: 18px; font-size: 15px; }
+.feed-app .feed-post-stats { min-height: 58px; margin-top: 2px; padding: 10px 24px; }
+.feed-app .feed-post-stats button { gap: 8px; }
+.feed-app .feed-post-stats button > .feed-reaction-stack { width: auto; height: 26px; margin: 0; display: flex; align-items: center; border: 0; background: transparent; }
+.feed-app .feed-reaction-stack img { width: 24px; height: 24px; margin-left: -7px; border: 2px solid var(--surface); border-radius: 50%; object-fit: cover; }
+.feed-app .feed-reaction-stack img:first-child { margin-left: 0; }
+.feed-app .feed-post-stats button > strong { font-weight: 400; }
+.feed-app .feed-post-stats > div { display: flex; gap: 24px; }
+.feed-app .feed-post-actions { height: 64px; padding: 0; border-top: 1px solid color-mix(in srgb, var(--border), transparent 45%); border-bottom: 1px solid color-mix(in srgb, var(--border), transparent 45%); background: rgba(24,144,255,.025); }
+.feed-app .feed-post-actions > button { height: 64px; border-radius: 0; font-size: 15px; }
+.feed-app .feed-like-symbol { font-size: 27px; line-height: 1; }
+.feed-app .feed-comments { padding-top: 24px; }
+.feed-app .feed-comment-entry { margin-top: 0; }
+.feed-app .feed-comment-form { min-height: 48px; border-radius: 24px; }
+.feed-app .feed-comment-form input { height: 42px; }
+.feed-app .feed-comment-extras { display: flex; align-items: center; gap: 12px; color: var(--muted); }
+.feed-app .feed-comment-extras [data-reference-icon="image"] { width: 16px; height: 16px; }
+.feed-app .feed-comment-form > button { color: var(--blue); }
+
+@media (min-width: 1200px) and (max-width: 1399px) {
+  .feed-app .feed-primary-nav > button,
+  .feed-app .feed-primary-nav > .feed-header-overlay-root > button { margin-inline: 6px; }
+  .feed-app .feed-profile-menu { margin-left: 10px; }
+  .feed-app .feed-stories { gap: 12px; }
+  .feed-app .feed-composer-tools > label,
+  .feed-app .feed-composer-tools > button { padding-inline: 6px; font-size: 13px; }
+}
+
+@media (min-width: 992px) and (max-width: 1199px) {
+  .feed-app .feed-header-search { width: min(310px, 27vw); margin-left: 18px; }
+  .feed-app .feed-primary-nav > button,
+  .feed-app .feed-primary-nav > .feed-header-overlay-root > button { min-width: 44px; margin: 0; padding-inline: 12px; }
+  .feed-app .feed-profile-menu { margin-left: 8px; }
+  .feed-app .feed-profile-menu > button > span { max-width: 92px; overflow: hidden; text-overflow: ellipsis; }
+  .feed-app .feed-stories { gap: 10px; }
+  .feed-app .feed-composer-tools > label,
+  .feed-app .feed-composer-tools > button { padding-inline: 5px; font-size: 0; }
+  .feed-app .feed-composer-tools > label span,
+  .feed-app .feed-composer-tools > button span { display: none; }
+}
+
+@media (max-width: 991px) {
+  .feed-app .feed-mobile-header { min-height: 64px; padding-top: 0; }
+  .feed-app .feed-mobile-header-row { height: 64px; }
+  .feed-app .feed-mobile-header-row .feed-logo { width: 169px; }
+  .feed-app .feed-shell { padding-top: 80px; }
+  .feed-app .feed-mobile-profile-dropdown { top: 64px; right: 8px; width: 312px; padding: 0; border: 0; background: transparent; box-shadow: none; }
+  .feed-app .feed-mobile-profile-dropdown .feed-profile-dropdown { position: static; transform: none; }
+  .feed-app .feed-composer { padding: 16px 16px 24px; }
+  .feed-app .feed-composer-bottom { margin-inline: -16px; }
+  .feed-app .feed-composer-tools { justify-content: flex-start; gap: 8px; }
+  .feed-app .feed-composer-tools > label,
+  .feed-app .feed-composer-tools > button { width: 34px; padding: 5px; justify-content: center; }
+  .feed-app .feed-composer-tools span { display: none; }
+  .feed-app .feed-post-card { padding-bottom: 16px; }
+  .feed-app .feed-post-menu { width: min(312px, calc(100vw - 24px)); }
+}

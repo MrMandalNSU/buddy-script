@@ -17,6 +17,8 @@ const repository = vi.hoisted(() => ({
   postLikers: vi.fn(),
   commentLikers: vi.fn(),
 }));
+const authMocks = vi.hoisted(() => ({ logout: vi.fn() }));
+const routerMocks = vi.hoisted(() => ({ replace: vi.fn() }));
 
 vi.mock("../repository", () => ({
   feedRepository: repository,
@@ -31,10 +33,10 @@ vi.mock("@/features/auth/AuthProvider", () => ({
   useAuth: () => ({
     status: "authenticated",
     user: { id: "viewer-1", firstName: "Alex", lastName: "Morgan", email: "alex@example.com", avatarUrl: null },
-    logout: vi.fn(),
+    logout: authMocks.logout,
   }),
 }));
-vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: vi.fn() }) }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: routerMocks.replace }) }));
 vi.mock("next/image", () => ({
   default: (props: ImgHTMLAttributes<HTMLImageElement> & { priority?: boolean; fill?: boolean; sizes?: string; unoptimized?: boolean }) => {
     const imageProps = { ...props };
@@ -104,6 +106,82 @@ describe("feed cache and shell", () => {
     await screen.findByText("Your feed is quiet");
     const shell = container.querySelector(".feed-shell");
     expect(Array.from(shell?.children ?? []).map((element) => element.getAttribute("data-feed-region"))).toEqual(["left", "main", "right"]);
+  });
+
+  it("renders the exact reference Explore order and icon identifiers", async () => {
+    repository.list.mockResolvedValue({ items: [], nextCursor: null });
+    const { container } = renderFeed();
+    await screen.findByText("Your feed is quiet");
+    const buttons = Array.from(container.querySelectorAll<HTMLButtonElement>(".feed-explore-card nav > button"));
+    expect(buttons.map((button) => button.getAttribute("aria-label"))).toEqual([
+      "Learning", "Insights", "Find friends", "Bookmarks", "Group", "Gaming", "Settings", "Save post",
+    ]);
+    expect(buttons.map((button) => button.querySelector("svg")?.getAttribute("data-reference-icon"))).toEqual([
+      "learning", "insights", "findFriends", "bookmark", "group", "gaming", "settings", "save",
+    ]);
+    expect(buttons.filter((button) => button.textContent?.includes("New")).map((button) => button.getAttribute("aria-label"))).toEqual(["Learning", "Gaming"]);
+  });
+
+  it("renders the exact header icon set, badges, and authenticated full name", async () => {
+    repository.list.mockResolvedValue({ items: [], nextCursor: null });
+    const { container } = renderFeed();
+    await screen.findByText("Your feed is quiet");
+    const header = container.querySelector<HTMLElement>(".feed-desktop-header")!;
+    expect(Array.from(header.querySelectorAll(".feed-primary-nav > button svg, .feed-header-overlay-root > button svg")).map((icon) => icon.getAttribute("data-reference-icon"))).toEqual(["home", "friends", "bell", "message"]);
+    expect(header.querySelector(".feed-primary-nav > button")?.classList.contains("is-active")).toBe(true);
+    expect(within(header).getByText("Alex Morgan")).toBeInTheDocument();
+    expect(within(header).getByText("6")).toBeInTheDocument();
+    expect(within(header).getByText("2")).toBeInTheDocument();
+  });
+
+  it("recreates the profile menu and keeps logout functional", async () => {
+    repository.list.mockResolvedValue({ items: [], nextCursor: null });
+    const { container } = renderFeed();
+    await screen.findByText("Your feed is quiet");
+    const header = container.querySelector<HTMLElement>(".feed-desktop-header")!;
+    fireEvent.click(within(header).getByRole("button", { name: "Open profile menu" }));
+    const menu = within(header).getByRole("menu", { name: "Profile menu" });
+    expect(within(menu).getByRole("button", { name: "View Profile" })).toBeInTheDocument();
+    expect(within(menu).getByRole("button", { name: "Settings" })).toBeInTheDocument();
+    expect(within(menu).getByRole("button", { name: "Help & Support" })).toBeInTheDocument();
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Log Out" }));
+    await waitFor(() => expect(authMocks.logout).toHaveBeenCalledOnce());
+    expect(routerMocks.replace).toHaveBeenCalledWith("/login");
+  });
+
+  it("keeps notification, profile, and post menus mutually exclusive and dismissible", async () => {
+    repository.list.mockResolvedValue({ items: [makePost("menu-post", "Menu post")], nextCursor: null });
+    const { container } = renderFeed();
+    await screen.findByText("Menu post");
+    const header = container.querySelector<HTMLElement>(".feed-desktop-header")!;
+    fireEvent.click(within(header).getByRole("button", { name: "Notifications" }));
+    expect(within(header).getByRole("region", { name: "Notifications panel" })).toBeInTheDocument();
+    fireEvent.click(within(header).getByRole("button", { name: "Notification options" }));
+    expect(within(header).getByRole("button", { name: "Mark as all read" })).toHaveAttribute("aria-disabled", "true");
+    fireEvent.click(within(header).getByRole("button", { name: "Open profile menu" }));
+    expect(within(header).queryByRole("region", { name: "Notifications panel" })).not.toBeInTheDocument();
+    expect(within(header).getByRole("menu", { name: "Profile menu" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Post menu" }));
+    expect(within(header).queryByRole("menu", { name: "Profile menu" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save Post" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Turn On Notification" })).toHaveAttribute("aria-disabled", "true");
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("button", { name: "Save Post" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Post menu" }));
+    fireEvent.pointerDown(document.body);
+    expect(screen.queryByRole("button", { name: "Save Post" })).not.toBeInTheDocument();
+  });
+
+  it("includes every reference composer action alongside visibility and Post", async () => {
+    repository.list.mockResolvedValue({ items: [], nextCursor: null });
+    const { container } = renderFeed();
+    await screen.findByText("Your feed is quiet");
+    const composer = container.querySelector<HTMLElement>(".feed-composer")!;
+    expect(Array.from(composer.querySelectorAll(".feed-composer-tools svg")).map((icon) => icon.getAttribute("data-reference-icon"))).toEqual(["image", "video", "event", "article"]);
+    expect(within(composer).getByRole("button", { name: "Add photo" })).toBeInTheDocument();
+    expect(within(composer).getByRole("button", { name: "Add article" })).toBeInTheDocument();
+    expect(within(composer).getByRole("combobox", { name: "Post visibility" })).toBeInTheDocument();
+    expect(within(composer).getByRole("button", { name: "Post" })).toBeInTheDocument();
   });
 
   it("keeps the created post visible when the reconciliation refresh fails", async () => {
