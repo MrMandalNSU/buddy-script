@@ -10,20 +10,20 @@ export class AuthController {
 
   register = async (request: Request, response: Response): Promise<void> => {
     const result = await this.service.register(request.body as RegisterInput, clientMetadata(request));
-    this.cookies.set(response, result.tokens);
+    this.cookies.set(response, result.tokens, result.persistent);
     response.status(201).json(successEnvelope(authPayload(result), request.requestId));
   };
 
   login = async (request: Request, response: Response): Promise<void> => {
     const result = await this.service.login(request.body as LoginInput, clientMetadata(request));
-    this.cookies.set(response, result.tokens);
+    this.cookies.set(response, result.tokens, result.persistent);
     response.json(successEnvelope(authPayload(result), request.requestId));
   };
 
   refresh = async (request: Request, response: Response): Promise<void> => {
     if (request.refreshAuth === undefined) throw new AppError(401, "UNAUTHORIZED", "Authentication is required");
     const result = await this.service.refresh(request.refreshAuth.rawToken, clientMetadata(request));
-    this.cookies.set(response, result.tokens);
+    this.cookies.set(response, result.tokens, result.persistent);
     response.json(successEnvelope(authPayload(result), request.requestId));
   };
 

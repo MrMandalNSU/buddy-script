@@ -74,6 +74,7 @@ databaseSuite("authentication API", { concurrent: false }, () => {
     const refreshCookie = setCookies(registration).find((cookie) => cookie.startsWith("bs_refresh="));
     expect(accessCookie).toContain("HttpOnly"); expect(accessCookie).toContain("SameSite=Strict"); expect(accessCookie).toContain("Path=/");
     expect(refreshCookie).toContain("HttpOnly"); expect(refreshCookie).toContain("Path=/api/v1/auth");
+    expect(accessCookie).toContain("Expires="); expect(refreshCookie).toContain("Expires=");
 
     const duplicate = await request(application).post("/api/v1/auth/register").send({ firstName: "Phase", lastName: "Three", email, password: "Password123!" });
     expect(duplicate.status).toBe(409);
@@ -97,6 +98,16 @@ databaseSuite("authentication API", { concurrent: false }, () => {
       request(application).post("/api/v1/auth/refresh").set("Cookie", concurrentCookies).set("x-csrf-token", concurrentCsrf),
     ]);
     expect(concurrent.map(({ status }) => status).sort()).toEqual([200, 401]);
+
+    const sessionAgent = request.agent(application);
+    const sessionLogin = await sessionAgent.post("/api/v1/auth/login").send({ email, password: "Password123!", remember: false });
+    expect(sessionLogin.status).toBe(200);
+    expect(setCookies(sessionLogin).every((cookie) => !cookie.includes("Expires="))).toBe(true);
+    const sessionRefresh = await sessionAgent.post("/api/v1/auth/refresh").set("x-csrf-token", csrfCookie(sessionLogin));
+    expect(sessionRefresh.status).toBe(200);
+    expect(setCookies(sessionRefresh).every((cookie) => !cookie.includes("Expires="))).toBe(true);
+    const registeredUser = await database.user.findUniqueOrThrow({ where: { emailNormalized: email }, select: { id: true } });
+    expect(await database.refreshSession.count({ where: { userId: registeredUser.id, persistent: false } })).toBe(2);
 
     const finalLogin = await agent.post("/api/v1/auth/login").send({ email, password: "Password123!" });
     expect(finalLogin.status).toBe(200);

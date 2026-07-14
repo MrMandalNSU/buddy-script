@@ -19,10 +19,10 @@ export class AuthCookieService {
     this.#base = { secure: environment.cookieSecure, sameSite: "strict" };
   }
 
-  set(response: Response, tokens: AuthTokens): void {
-    response.cookie(this.names.access, tokens.accessToken, { ...this.#base, httpOnly: true, path: "/", expires: tokens.accessExpiresAt });
-    response.cookie(this.names.refresh, tokens.refreshToken, { ...this.#base, httpOnly: true, path: "/api/v1/auth", expires: tokens.refreshExpiresAt });
-    response.cookie(this.names.csrf, tokens.csrfToken, { ...this.#base, httpOnly: false, path: "/", expires: tokens.refreshExpiresAt });
+  set(response: Response, tokens: AuthTokens, persistent = true): void {
+    response.cookie(this.names.access, tokens.accessToken, { ...this.#base, httpOnly: true, path: "/", ...(persistent ? { expires: tokens.accessExpiresAt } : {}) });
+    response.cookie(this.names.refresh, tokens.refreshToken, { ...this.#base, httpOnly: true, path: "/api/v1/auth", ...(persistent ? { expires: tokens.refreshExpiresAt } : {}) });
+    response.cookie(this.names.csrf, tokens.csrfToken, { ...this.#base, httpOnly: false, path: "/", ...(persistent ? { expires: tokens.refreshExpiresAt } : {}) });
   }
 
   clear(response: Response): void {

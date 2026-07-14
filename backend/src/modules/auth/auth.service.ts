@@ -18,10 +18,11 @@ export class AuthService {
     try {
       const user = await this.repository.createUserAndSession({
         id: sessionId, userId, familyId, tokenHash: this.tokens.hashToken(issued.refreshToken), expiresAt: issued.refreshExpiresAt,
+        persistent: true,
         firstName: input.firstName.trim(), lastName: input.lastName.trim(), email: input.email.trim(),
         emailNormalized: normalizeEmail(input.email), passwordHash: await hashPassword(input.password), avatarUrl: avatarForUser(userId), ...this.hashMetadata(metadata),
       });
-      return { user: toPublicUser(user), tokens: issued };
+      return { user: toPublicUser(user), tokens: issued, persistent: true };
     } catch (error) {
       if (isUniqueConstraintError(error)) throw new AppError(409, "BAD_REQUEST", "An account with this email already exists");
       throw error;
@@ -36,9 +37,9 @@ export class AuthService {
     const issued = await this.tokens.issuePair(user.id, sessionId, familyId);
     await this.repository.createSession({
       id: sessionId, userId: user.id, familyId, tokenHash: this.tokens.hashToken(issued.refreshToken),
-      expiresAt: issued.refreshExpiresAt, ...this.hashMetadata(metadata),
+      expiresAt: issued.refreshExpiresAt, persistent: input.remember, ...this.hashMetadata(metadata),
     });
-    return { user: toPublicUser(user), tokens: issued };
+    return { user: toPublicUser(user), tokens: issued, persistent: input.remember };
   }
 
   async refresh(rawToken: string, metadata: ClientMetadata): Promise<AuthResult> {
@@ -58,14 +59,14 @@ export class AuthService {
     const issued = await this.tokens.issuePair(user.id, nextSessionId, claims.familyId);
     const next: NewSession = {
       id: nextSessionId, userId: user.id, familyId: claims.familyId, tokenHash: this.tokens.hashToken(issued.refreshToken),
-      expiresAt: issued.refreshExpiresAt, ...this.hashMetadata(metadata),
+      expiresAt: issued.refreshExpiresAt, persistent: stored.persistent, ...this.hashMetadata(metadata),
     };
     const rotated = await this.repository.rotateSession(stored.id, next);
     if (!rotated) {
       await this.repository.revokeFamily(claims.familyId);
       throw new AppError(401, "UNAUTHORIZED", "Refresh token reuse was detected");
     }
-    return { user: toPublicUser(user), tokens: issued };
+    return { user: toPublicUser(user), tokens: issued, persistent: stored.persistent };
   }
 
   async logout(rawRefreshToken: string): Promise<void> {

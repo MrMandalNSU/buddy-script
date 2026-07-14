@@ -27,4 +27,12 @@ describe("authentication schemas", () => {
   it("does not apply the registration policy to login passwords", () => {
     expect(loginSchema.safeParse({ email: "ava@example.com", password: "historical-password" }).success).toBe(true);
   });
+
+  it("defaults older login clients to persistent sessions", () => {
+    expect(loginSchema.parse({ email: "ava@example.com", password: "historical-password" }).remember).toBe(true);
+  });
+
+  it("preserves an explicit session-only login preference", () => {
+    expect(loginSchema.parse({ email: "ava@example.com", password: "historical-password", remember: false }).remember).toBe(false);
+  });
 });

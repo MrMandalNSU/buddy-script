@@ -4,10 +4,10 @@ import { withTransaction } from "../../infrastructure/database/transaction.js";
 
 export type AuthUserRecord = Pick<User, "id" | "firstName" | "lastName" | "email" | "avatarUrl" | "passwordHash" | "status" | "createdAt">;
 export interface StoredSession {
-  id: string; userId: string; familyId: string; tokenHash: string; expiresAt: Date; revokedAt: Date | null; userStatus: AccountStatus;
+  id: string; userId: string; familyId: string; tokenHash: string; expiresAt: Date; revokedAt: Date | null; persistent: boolean; userStatus: AccountStatus;
 }
 export interface NewSession {
-  id: string; userId: string; familyId: string; tokenHash: string; expiresAt: Date; ipHash?: string; userAgentHash?: string;
+  id: string; userId: string; familyId: string; tokenHash: string; expiresAt: Date; persistent: boolean; ipHash?: string; userAgentHash?: string;
 }
 export interface NewUser extends NewSession {
   firstName: string; lastName: string; email: string; emailNormalized: string; passwordHash: string; avatarUrl: string;
@@ -47,7 +47,7 @@ export class AuthRepository {
   async findSessionByHash(tokenHash: string): Promise<StoredSession | null> {
     const session = await this.database.refreshSession.findUnique({
       where: { tokenHash },
-      select: { id: true, userId: true, familyId: true, tokenHash: true, expiresAt: true, revokedAt: true, user: { select: { status: true } } },
+      select: { id: true, userId: true, familyId: true, tokenHash: true, expiresAt: true, revokedAt: true, persistent: true, user: { select: { status: true } } },
     });
     return session === null ? null : { ...session, userStatus: session.user.status };
   }
@@ -79,7 +79,7 @@ export class AuthRepository {
 
   private sessionData(input: NewSession) {
     return {
-      id: input.id, userId: input.userId, familyId: input.familyId, tokenHash: input.tokenHash, expiresAt: input.expiresAt,
+      id: input.id, userId: input.userId, familyId: input.familyId, tokenHash: input.tokenHash, expiresAt: input.expiresAt, persistent: input.persistent,
       ...(input.ipHash === undefined ? {} : { ipHash: input.ipHash }),
       ...(input.userAgentHash === undefined ? {} : { userAgentHash: input.userAgentHash }),
     };
