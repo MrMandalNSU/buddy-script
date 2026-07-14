@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { createElement, type ImgHTMLAttributes, type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Comment, Page, Post } from "../types";
-import { FeedApp, prependPostToFeed } from "./FeedApp";
+import { FeedApp, prependPostToFeed, relativeTime } from "./FeedApp";
 
 const repository = vi.hoisted(() => ({
   list: vi.fn(),
@@ -101,6 +101,16 @@ describe("feed cache and shell", () => {
   });
   afterEach(cleanup);
 
+  it("formats post and comment times as full relative phrases", () => {
+    const now = Date.parse("2026-07-14T12:00:00.000Z");
+    expect(relativeTime("2026-07-14T11:59:30.000Z", now)).toBe("Just now");
+    expect(relativeTime("2026-07-14T11:59:00.000Z", now)).toBe("1 minute ago");
+    expect(relativeTime("2026-07-14T11:55:00.000Z", now)).toBe("5 minutes ago");
+    expect(relativeTime("2026-07-14T11:00:00.000Z", now)).toBe("1 hour ago");
+    expect(relativeTime("2026-07-12T12:00:00.000Z", now)).toBe("2 days ago");
+    expect(relativeTime("2026-06-30T12:00:00.000Z", now)).toBe("2 weeks ago");
+  });
+
   it("prepends a created post and removes duplicates across every page", () => {
     const created = makePost("new", "New post");
     const data: InfiniteData<Page<Post>> = {
@@ -121,6 +131,20 @@ describe("feed cache and shell", () => {
     await screen.findByText("Your feed is quiet");
     const shell = container.querySelector(".feed-shell");
     expect(Array.from(shell?.children ?? []).map((element) => element.getAttribute("data-feed-region"))).toEqual(["left", "main", "right"]);
+  });
+
+  it("embeds a profile avatar over every public desktop story", async () => {
+    repository.list.mockResolvedValue({ items: [], nextCursor: null });
+    const { container } = renderFeed();
+    await screen.findByText("Your feed is quiet");
+    const publicStories = Array.from(container.querySelectorAll<HTMLElement>(".feed-stories .feed-story:not(.feed-story-create)"));
+    expect(publicStories).toHaveLength(3);
+    publicStories.forEach((story) => {
+      const owner = story.querySelector<HTMLImageElement>(".feed-story-owner");
+      expect(owner).toHaveAttribute("src", "/assets/mini_pic.png");
+      expect(owner).toHaveAttribute("width", "30");
+      expect(owner).toHaveAttribute("height", "30");
+    });
   });
 
   it("renders the exact reference Explore order and icon identifiers", async () => {
@@ -298,6 +322,24 @@ describe("feed cache and shell", () => {
     expect(within(composer).getByRole("button", { name: "Post" })).toBeInTheDocument();
   });
 
+  it("uses a themed accessible visibility picker and applies its selection", async () => {
+    repository.list.mockResolvedValue({ items: [], nextCursor: null });
+    repository.create.mockResolvedValue(makePost("private-post", "A private update"));
+    const { container } = renderFeed();
+    await screen.findByText("Your feed is quiet");
+    const composer = container.querySelector<HTMLElement>(".feed-composer")!;
+    const visibility = within(composer).getByRole("combobox", { name: "Post visibility" });
+    expect(visibility).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(visibility);
+    const choices = within(composer).getByRole("listbox", { name: "Choose post visibility" });
+    expect(within(choices).getAllByRole("option")).toHaveLength(2);
+    fireEvent.click(within(choices).getByRole("option", { name: /Private/ }));
+    expect(visibility).toHaveTextContent("Private");
+    fireEvent.change(within(composer).getByLabelText("Post text"), { target: { value: "A private update" } });
+    fireEvent.click(within(composer).getByRole("button", { name: "Post" }));
+    await waitFor(() => expect(repository.create).toHaveBeenCalledWith({ body: "A private update", visibility: "private" }));
+  });
+
   it("keeps the created post visible when the reconciliation refresh fails", async () => {
     const oldPost = makePost("old", "Existing post");
     const newPost = makePost("new", "A newly published post");
@@ -325,7 +367,7 @@ describe("feed cache and shell", () => {
     expect(within(picker).getAllByRole("menuitem").map((button) => button.getAttribute("aria-label"))).toEqual(["Like", "Love", "Care", "Haha", "Wow", "Sad", "Angry"]);
     fireEvent.click(within(picker).getByRole("menuitem", { name: "Love" }));
     await waitFor(() => expect(repository.setPostReaction).toHaveBeenCalledWith("liked-post", "love"));
-    expect(await screen.findByRole("button", { name: "Love" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Love" })).toHaveClass("is-reacted");
   });
 
   it("shows each active reaction type in a comment reaction preview", async () => {
@@ -366,6 +408,14 @@ describe("feed cache and shell", () => {
     await screen.findByText("A root comment");
 
     const commentInput = screen.getByRole("textbox", { name: "Write a comment" });
+    const postCard = screen.getByText("Discuss this post").closest(".feed-post-card")!;
+    const actions = postCard.querySelector<HTMLElement>(".feed-post-actions")!;
+    const rootEntry = postCard.querySelector<HTMLElement>(".feed-comment-entry--root")!;
+    const firstComment = screen.getByText("A root comment").closest(".feed-comment")!;
+    expect(actions.compareDocumentPosition(rootEntry) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(rootEntry.compareDocumentPosition(firstComment) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.click(within(actions).getByRole("button", { name: "Comment" }));
+    expect(commentInput).toHaveFocus();
     fireEvent.change(commentInput, { target: { value: "A new top-level comment" } });
     fireEvent.click(within(commentInput.closest("form")!).getByRole("button", { name: "Post comment" }));
     await waitFor(() => expect(repository.addComment).toHaveBeenCalledWith("thread-post", "A new top-level comment"));
@@ -376,6 +426,29 @@ describe("feed cache and shell", () => {
     fireEvent.click(within(replyInput.closest("form")!).getByRole("button", { name: "Post comment" }));
     await waitFor(() => expect(repository.addReply).toHaveBeenCalledWith("comment-1", "A nested reply"));
     await screen.findByText("A nested reply");
+  });
+
+  it("shows one reply by default and expands the full reply thread", async () => {
+    const root = {
+      ...makeComment("root-with-replies", "replies-post", "A comment with replies"),
+      engagement: { ...makeComment("root-with-replies", "replies-post", "").engagement, replyCount: 3 },
+    };
+    const replies = [
+      makeComment("reply-one", "replies-post", "First visible reply", 1, root.id),
+      makeComment("reply-two", "replies-post", "Second hidden reply", 1, root.id),
+      makeComment("reply-three", "replies-post", "Third hidden reply", 1, root.id),
+    ];
+    const post = { ...makePost("replies-post", "Reply preview post"), commentPreview: [root], engagement: { ...makePost("replies-post", "").engagement, commentCount: 1 } };
+    repository.list.mockResolvedValue({ items: [post], nextCursor: null });
+    repository.replies.mockResolvedValue({ items: replies, nextCursor: null });
+    renderFeed();
+
+    await screen.findByText("First visible reply");
+    expect(screen.queryByText("Second hidden reply")).not.toBeInTheDocument();
+    expect(screen.queryByText("Third hidden reply")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "View all 3 replies" }));
+    expect(await screen.findByText("Second hidden reply")).toBeInTheDocument();
+    expect(screen.getByText("Third hidden reply")).toBeInTheDocument();
   });
 
   it("lets a commenter edit and delete their own comment", async () => {

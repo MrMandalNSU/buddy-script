@@ -35,11 +35,24 @@ type OpenOverlay =
 
 const fullName = (user: Pick<User, "firstName" | "lastName">) => `${user.firstName} ${user.lastName}`;
 
-const relativeTime = (date: string) => {
-  const minutes = Math.max(1, Math.round((Date.now() - Date.parse(date)) / 60_000));
-  if (minutes < 60) return `${minutes}m`;
-  const hours = Math.round(minutes / 60);
-  return hours < 24 ? `${hours}h` : `${Math.round(hours / 24)}d`;
+export const relativeTime = (date: string, now = Date.now()) => {
+  const timestamp = Date.parse(date);
+  if (Number.isNaN(timestamp)) return "Just now";
+  const seconds = Math.max(0, Math.floor((now - timestamp) / 1_000));
+  if (seconds < 60) return "Just now";
+
+  const format = (value: number, unit: string) => `${value} ${unit}${value === 1 ? "" : "s"} ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return format(minutes, "minute");
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return format(hours, "hour");
+  const days = Math.floor(hours / 24);
+  if (days < 7) return format(days, "day");
+  const weeks = Math.floor(days / 7);
+  if (weeks < 5) return format(weeks, "week");
+  const months = Math.floor(days / 30);
+  if (months < 12) return format(months, "month");
+  return format(Math.floor(days / 365), "year");
 };
 
 export function prependPostToFeed(
@@ -344,6 +357,113 @@ function Stories({ user }: { user: FeedUser }) {
   </>;
 }
 
+const visibilityOptions: Array<{ value: Visibility; label: string; description: string }> = [
+  { value: "public", label: "Public", description: "Everyone can see this" },
+  { value: "private", label: "Private", description: "Only you can see this" },
+];
+
+function VisibilityIcon({ visibility }: { visibility: Visibility }) {
+  if (visibility === "private") {
+    return <svg className="feed-visibility-icon" viewBox="0 0 20 20" aria-hidden="true"><rect x="4" y="8.5" width="12" height="9" rx="2" /><path d="M6.75 8.5V6.25a3.25 3.25 0 0 1 6.5 0V8.5M10 12.25v1.75" /></svg>;
+  }
+  return <svg className="feed-visibility-icon" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7.5" /><path d="M2.8 10h14.4M10 2.5c2 2.05 3.05 4.55 3.05 7.5S12 15.45 10 17.5C8 15.45 6.95 12.95 6.95 10S8 4.55 10 2.5Z" /></svg>;
+}
+
+function VisibilityPicker({ value, onChange }: { value: Visibility; onChange: (value: Visibility) => void }) {
+  const [open, setOpen] = useState(false);
+  const listboxId = useId();
+  const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const selected = visibilityOptions.find((option) => option.value === value) ?? visibilityOptions[0];
+
+  useEffect(() => {
+    if (!open) return;
+    const closeOutside = (event: PointerEvent) => {
+      if (event.target instanceof Node && !rootRef.current?.contains(event.target)) setOpen(false);
+    };
+    document.addEventListener("pointerdown", closeOutside);
+    return () => document.removeEventListener("pointerdown", closeOutside);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const selectedIndex = visibilityOptions.findIndex((option) => option.value === value);
+    const frame = requestAnimationFrame(() => optionRefs.current[selectedIndex]?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [open, value]);
+
+  const closeAndFocus = () => {
+    setOpen(false);
+    requestAnimationFrame(() => triggerRef.current?.focus());
+  };
+
+  const moveOptionFocus = (direction: 1 | -1) => {
+    const currentIndex = optionRefs.current.findIndex((option) => option === document.activeElement);
+    const nextIndex = (currentIndex + direction + visibilityOptions.length) % visibilityOptions.length;
+    optionRefs.current[nextIndex]?.focus();
+  };
+
+  return <div className="feed-visibility" ref={rootRef}>
+    <button
+      ref={triggerRef}
+      className="feed-visibility-trigger"
+      type="button"
+      role="combobox"
+      aria-label="Post visibility"
+      aria-controls={listboxId}
+      aria-expanded={open}
+      aria-haspopup="listbox"
+      onClick={() => setOpen((current) => !current)}
+      onKeyDown={(event) => {
+        if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+          event.preventDefault();
+          setOpen(true);
+        }
+        if (event.key === "Escape") {
+          event.preventDefault();
+          setOpen(false);
+        }
+      }}
+    >
+      <VisibilityIcon visibility={value} />
+      <span>{selected.label}</span>
+      <FeedReferenceIcon className="feed-visibility-chevron" name="chevron" />
+    </button>
+    {open && <div id={listboxId} className="feed-visibility-menu" role="listbox" aria-label="Choose post visibility" onKeyDown={(event) => {
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        moveOptionFocus(event.key === "ArrowDown" ? 1 : -1);
+      }
+      if (event.key === "Home" || event.key === "End") {
+        event.preventDefault();
+        optionRefs.current[event.key === "Home" ? 0 : visibilityOptions.length - 1]?.focus();
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeAndFocus();
+      }
+      if (event.key === "Tab") {
+        setOpen(false);
+      }
+    }}>
+      {visibilityOptions.map((option, index) => <button
+        ref={(element) => { optionRefs.current[index] = element; }}
+        type="button"
+        role="option"
+        aria-selected={value === option.value}
+        className={value === option.value ? "is-selected" : ""}
+        key={option.value}
+        onClick={() => { onChange(option.value); closeAndFocus(); }}
+      >
+        <span className="feed-visibility-option-icon"><VisibilityIcon visibility={option.value} /></span>
+        <span><strong>{option.label}</strong><small>{option.description}</small></span>
+        <svg className="feed-visibility-check" viewBox="0 0 16 16" aria-hidden="true"><path d="m3 8.25 3.1 3.1L13 4.75" /></svg>
+      </button>)}
+    </div>}
+  </div>;
+}
+
 function Composer({ user }: { user: FeedUser }) {
   const client = useQueryClient();
   const inputId = useId();
@@ -402,7 +522,7 @@ function Composer({ user }: { user: FeedUser }) {
         <DisabledButton label="Add event"><FeedReferenceIcon name="event" /><span>Event</span></DisabledButton>
         <DisabledButton label="Add article"><FeedReferenceIcon name="article" /><span>Article</span></DisabledButton>
       </div>
-      <label className="feed-visibility"><span className="sr-only">Post visibility</span><select value={visibility} onChange={(event) => setVisibility(event.target.value as Visibility)}><option value="public">Public</option><option value="private">Private</option></select></label>
+      <VisibilityPicker value={visibility} onChange={setVisibility} />
       <button className="feed-post-button" type="button" aria-label="Post" disabled={mutation.isPending || (!body.trim() && !file)} onClick={() => mutation.mutate()}><FeedReferenceIcon name="post" /><span>{mutation.isPending ? file && progress < 100 ? `${progress}%` : "Posting" : "Post"}</span></button>
     </div>
     {mutation.isPending && <button className="feed-cancel-upload" type="button" onClick={() => abortRef.current?.abort()}>Cancel</button>}
@@ -410,7 +530,7 @@ function Composer({ user }: { user: FeedUser }) {
   </section>;
 }
 
-function CommentForm({ placeholder, submit }: { placeholder: string; submit: (body: string) => Promise<void> }) {
+function CommentForm({ placeholder, submit, inputId }: { placeholder: string; submit: (body: string) => Promise<void>; inputId?: string }) {
   const [body, setBody] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
@@ -430,7 +550,7 @@ function CommentForm({ placeholder, submit }: { placeholder: string; submit: (bo
     }
   };
 
-  return <form className="feed-comment-form" onSubmit={onSubmit}><input value={body} onChange={(event) => setBody(event.target.value)} placeholder={placeholder} aria-label={placeholder} /><div className="feed-comment-extras" aria-hidden="true"><FeedReferenceIcon name="microphone" /><FeedReferenceIcon name="image" /></div><button disabled={pending || !body.trim()} aria-label="Post comment"><FeedReferenceIcon name="post" /></button>{error && <small role="alert">{error}</small>}</form>;
+  return <form className="feed-comment-form" onSubmit={onSubmit}><input id={inputId} value={body} onChange={(event) => setBody(event.target.value)} placeholder={placeholder} aria-label={placeholder} /><div className="feed-comment-extras" aria-hidden="true"><FeedReferenceIcon name="microphone" /><FeedReferenceIcon name="image" /></div><button disabled={pending || !body.trim()} aria-label="Post comment"><FeedReferenceIcon name="post" /></button>{error && <small role="alert">{error}</small>}</form>;
 }
 
 function ReactionControl({
@@ -530,6 +650,7 @@ function CommentDeleteDialog({ comment, pending, close, confirm }: { comment: Co
 function CommentItem({ comment, viewer, postAuthorId, overlay, setOverlay, showReactors }: { comment: Comment; viewer: FeedUser; postAuthorId: string; overlay?: OpenOverlay; setOverlay: (overlay?: OpenOverlay) => void; showReactors: (commentId: string) => void }) {
   const client = useQueryClient();
   const [replying, setReplying] = useState(false);
+  const [repliesExpanded, setRepliesExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(comment.body);
   const [confirming, setConfirming] = useState(false);
@@ -605,6 +726,7 @@ function CommentItem({ comment, viewer, postAuthorId, overlay, setOverlay, showR
   });
   const add = async (body: string) => {
     await feedRepository.addReply(comment.id, body);
+    setRepliesExpanded(true);
     await client.invalidateQueries({ queryKey: feedKeys.replies(comment.id) });
     setReplying(false);
   };
@@ -620,12 +742,14 @@ function CommentItem({ comment, viewer, postAuthorId, overlay, setOverlay, showR
   };
 
   const previewReactions = reactionPreviewTypes(comment.engagement);
+  const allReplies = replies.data?.pages.flatMap((page) => page.items) ?? [];
+  const visibleReplies = repliesExpanded ? allReplies : allReplies.slice(0, 1);
 
   return <div className={`feed-comment ${comment.depth ? "is-reply" : ""}`}><Avatar user={comment.author} size={36} /><div className="feed-comment-content"><div className="feed-comment-bubble">
     <strong>{fullName(comment.author)}</strong>
     {editing ? <form className="feed-comment-edit" onSubmit={(event) => { event.preventDefault(); save(); }}><textarea autoFocus aria-label="Edit comment" maxLength={2000} value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={editKeyDown} /><div><button type="button" onClick={() => { setDraft(comment.body); setEditing(false); }}>Cancel</button><button type="submit" disabled={edit.isPending || !draft.trim()}>Save</button></div></form> : <p>{comment.body}</p>}
     {canDelete && !editing && <div className="feed-comment-menu-root" data-feed-overlay-root><button type="button" aria-label="Comment options" aria-expanded={menuOpen} onClick={() => setOverlay(menuOpen ? undefined : { kind: "comment", id: comment.id })}><FeedReferenceIcon name="moreVertical" /></button>{menuOpen && <div className="feed-comment-menu" role="menu">{canEdit && <button type="button" role="menuitem" onClick={() => { setDraft(comment.body); setEditing(true); setOverlay(undefined); }}><FeedReferenceIcon name="edit" />Edit</button>}<button type="button" role="menuitem" onClick={() => { setConfirming(true); setOverlay(undefined); }}><FeedReferenceIcon name="delete" />Delete</button></div>}</div>}
-  </div><div className="feed-comment-actions"><ReactionControl target="comment" id={comment.id} current={comment.engagement.viewerReaction} pending={reaction.isPending} compact overlay={overlay} setOverlay={setOverlay} onToggle={() => reaction.mutate(comment.engagement.viewerReaction === null ? "like" : null)} onSelect={(next) => { reaction.mutate(next); setOverlay(undefined); }} />{comment.depth === 0 && <button type="button" onClick={() => setReplying((value) => !value)}>Reply</button>}<span>{relativeTime(comment.createdAt)}</span><button type="button" className="feed-comment-reaction-summary" disabled={comment.engagement.reactionCount === 0} aria-label={`${comment.engagement.reactionCount} reactions${previewReactions.length ? `: ${previewReactions.map((type) => reactionLabel(type)).join(", ")}` : ""}`} onClick={() => showReactors(comment.id)}><span className="feed-comment-reaction-icons" aria-hidden="true">{previewReactions.map((type) => <FeedReactionIcon key={type} name={type} size={14} />)}</span><span>{comment.engagement.reactionCount}</span></button></div>{error && <p className="feed-comment-error" role="alert">{error}</p>}{comment.depth === 0 && <>{replies.data?.pages.flatMap((page) => page.items).map((reply) => <CommentItem key={reply.id} comment={reply} viewer={viewer} postAuthorId={postAuthorId} overlay={overlay} setOverlay={setOverlay} showReactors={showReactors} />)}{replies.hasNextPage && <button className="feed-inline-button" type="button" onClick={() => replies.fetchNextPage()}>Load more replies</button>}{replying && <CommentForm placeholder={`Reply to ${comment.author.firstName}…`} submit={add} />}</>}</div>{confirming && <CommentDeleteDialog comment={comment} pending={deletion.isPending} close={() => setConfirming(false)} confirm={() => deletion.mutate()} />}</div>;
+  </div><div className="feed-comment-actions"><ReactionControl target="comment" id={comment.id} current={comment.engagement.viewerReaction} pending={reaction.isPending} compact overlay={overlay} setOverlay={setOverlay} onToggle={() => reaction.mutate(comment.engagement.viewerReaction === null ? "like" : null)} onSelect={(next) => { reaction.mutate(next); setOverlay(undefined); }} />{comment.depth === 0 && <button type="button" onClick={() => setReplying((value) => !value)}>Reply</button>}<span>{relativeTime(comment.createdAt)}</span><button type="button" className="feed-comment-reaction-summary" disabled={comment.engagement.reactionCount === 0} aria-label={`${comment.engagement.reactionCount} reactions${previewReactions.length ? `: ${previewReactions.map((type) => reactionLabel(type)).join(", ")}` : ""}`} onClick={() => showReactors(comment.id)}><span className="feed-comment-reaction-icons" aria-hidden="true">{previewReactions.map((type) => <FeedReactionIcon key={type} name={type} size={14} />)}</span><span>{comment.engagement.reactionCount}</span></button></div>{error && <p className="feed-comment-error" role="alert">{error}</p>}{comment.depth === 0 && <>{comment.engagement.replyCount > 1 && !repliesExpanded && <button className="feed-inline-button feed-view-replies" type="button" aria-expanded="false" onClick={() => setRepliesExpanded(true)}>View all {comment.engagement.replyCount} replies</button>}{visibleReplies.map((reply) => <CommentItem key={reply.id} comment={reply} viewer={viewer} postAuthorId={postAuthorId} overlay={overlay} setOverlay={setOverlay} showReactors={showReactors} />)}{repliesExpanded && replies.hasNextPage && <button className="feed-inline-button feed-view-replies" type="button" onClick={() => replies.fetchNextPage()}>Load more replies</button>}{replying && <CommentForm placeholder={`Reply to ${comment.author.firstName}…`} submit={add} />}</>}</div>{confirming && <CommentDeleteDialog comment={comment} pending={deletion.isPending} close={() => setConfirming(false)} confirm={() => deletion.mutate()} />}</div>;
 }
 
 function PostEditDialog({ post, close }: { post: Post; close: () => void }) {
@@ -780,7 +904,7 @@ const postMenuItems: Array<{ label: string; icon: FeedReferenceIconName }> = [
   { label: "Hide", icon: "hide" },
 ];
 
-function Comments({ post, user, overlay, setOverlay, showReactors }: { post: Post; user: FeedUser; overlay?: OpenOverlay; setOverlay: (overlay?: OpenOverlay) => void; showReactors: (commentId: string) => void }) {
+function Comments({ post, user, inputId, overlay, setOverlay, showReactors }: { post: Post; user: FeedUser; inputId: string; overlay?: OpenOverlay; setOverlay: (overlay?: OpenOverlay) => void; showReactors: (commentId: string) => void }) {
   const client = useQueryClient();
   const [expanded, setExpanded] = useState(false);
   const comments = useInfiniteQuery({
@@ -801,11 +925,11 @@ function Comments({ post, user, overlay, setOverlay, showReactors }: { post: Pos
   };
 
   return <div className="feed-comments">
+    <div className="feed-comment-entry feed-comment-entry--root"><Avatar user={user} size={36} /><CommentForm inputId={inputId} placeholder="Write a comment" submit={add} /></div>
     {post.engagement.commentCount > post.commentPreview.length && !expanded && <button type="button" className="feed-previous-comments" onClick={() => setExpanded(true)}>View all {post.engagement.commentCount} comments</button>}
     {comments.isLoading && <p className="feed-comments-loading">Loading comments…</p>}
     {items.map((comment) => <CommentItem key={comment.id} comment={comment} viewer={user} postAuthorId={post.author.id} overlay={overlay} setOverlay={setOverlay} showReactors={showReactors} />)}
     {comments.hasNextPage && <button type="button" className="feed-inline-button" onClick={() => comments.fetchNextPage()}>Load more comments</button>}
-    <div className="feed-comment-entry"><Avatar user={user} size={36} /><CommentForm placeholder="Write a comment" submit={add} /></div>
   </div>;
 }
 
@@ -832,6 +956,7 @@ function ReactorsDialog({ target, close }: { target: { kind: "post" | "comment";
 function PostCard({ post, user, showReactors, showCommentReactors, menuOpen, overlay, setOverlay }: { post: Post; user: FeedUser; showReactors: () => void; showCommentReactors: (commentId: string) => void; menuOpen: boolean; overlay?: OpenOverlay; setOverlay: (overlay?: OpenOverlay) => void }) {
   const client = useQueryClient();
   const isAuthor = post.author.id === user.id;
+  const commentInputId = `comment-input-${post.id}`;
   const mutation = useMutation({
     mutationFn: (next: ReactionType | null) => feedRepository.setPostReaction(post.id, next),
     onMutate: async (next) => {
@@ -855,8 +980,8 @@ function PostCard({ post, user, showReactors, showCommentReactors, menuOpen, ove
     {post.body && <p className="feed-post-body">{post.body}</p>}
     {post.image && <div className="feed-post-image"><Image src={post.image.secureUrl} alt="Image shared with this post" width={post.image.width} height={post.image.height} sizes="(max-width: 991px) 100vw, 636px" /></div>}
     <div className="feed-post-stats"><button type="button" disabled={post.engagement.reactionCount === 0} onClick={showReactors}><span className="feed-reaction-stack">{post.reactionPreview.map((reactor) => <Avatar key={reactor.user.id} user={reactor.user} size={24} />)}{post.engagement.reactionCount > post.reactionPreview.length && <i>+{post.engagement.reactionCount - post.reactionPreview.length}</i>}</span><strong>{post.engagement.reactionCount}</strong></button><div><span>{post.engagement.commentCount} Comment</span><span>0 Share</span></div></div>
-    <div className="feed-post-actions"><ReactionControl target="post" id={post.id} current={post.engagement.viewerReaction} pending={mutation.isPending} overlay={overlay} setOverlay={setOverlay} onToggle={() => mutation.mutate(post.engagement.viewerReaction === null ? "like" : null)} onSelect={(next) => { mutation.mutate(next); setOverlay(undefined); }} /><button type="button" onClick={() => document.getElementById(`comment-${post.id}`)?.focus()}><FeedReferenceIcon name="comment" />Comment</button><DisabledButton label="Share post"><FeedReferenceIcon name="share" />Share</DisabledButton></div>
-    <div id={`comment-${post.id}`} tabIndex={-1}><Comments post={post} user={user} overlay={overlay} setOverlay={setOverlay} showReactors={showCommentReactors} /></div>
+    <div className="feed-post-actions"><ReactionControl target="post" id={post.id} current={post.engagement.viewerReaction} pending={mutation.isPending} overlay={overlay} setOverlay={setOverlay} onToggle={() => mutation.mutate(post.engagement.viewerReaction === null ? "like" : null)} onSelect={(next) => { mutation.mutate(next); setOverlay(undefined); }} /><button type="button" aria-controls={commentInputId} onClick={() => document.getElementById(commentInputId)?.focus()}><FeedReferenceIcon name="comment" />Comment</button><DisabledButton label="Share post"><FeedReferenceIcon name="share" />Share</DisabledButton></div>
+    <Comments post={post} user={user} inputId={commentInputId} overlay={overlay} setOverlay={setOverlay} showReactors={showCommentReactors} />
     {overlay?.kind === "post-edit" && overlay.id === post.id && <PostEditDialog post={post} close={() => setOverlay(undefined)} />}
     {overlay?.kind === "post-audience" && overlay.id === post.id && <PostAudienceDialog post={post} close={() => setOverlay(undefined)} />}
     {overlay?.kind === "post-delete" && overlay.id === post.id && <PostDeleteDialog post={post} close={() => setOverlay(undefined)} />}
