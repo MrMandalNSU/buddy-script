@@ -586,7 +586,7 @@ docker build -t buddyscript-api .
 
 Run the application image with the required environment values supplied by your platform. The image exposes port 4000 and includes a `/health/live` health check.
 
-The runtime image retains the Prisma CLI and migration workspace for Railway's pre-deploy hook. The hook invokes the installed CLI directly instead of running pnpm or reinstalling dependencies inside the non-root runtime container.
+The runtime image retains the Prisma CLI, migration workspace, and source modules required by the TypeScript seed for Railway operations. The pre-deploy hook invokes the installed CLI directly instead of running pnpm or reinstalling dependencies inside the non-root runtime container.
 
 ### Release order
 

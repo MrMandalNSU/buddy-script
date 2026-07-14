@@ -22,9 +22,11 @@ ENV NODE_ENV=production \
 WORKDIR /app
 COPY --from=build --chown=node:node /app/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/dist ./dist
+COPY --from=build --chown=node:node /app/src ./src
 COPY --from=build --chown=node:node /app/package.json ./package.json
 COPY --from=build --chown=node:node /app/prisma.config.ts ./prisma.config.ts
 COPY --from=build --chown=node:node /app/prisma ./prisma
+RUN node --import tsx --input-type=module -e "await import('./src/generated/prisma/client.js'); await import('./prisma/seed-data.js'); await import('./src/modules/auth/password.service.js')"
 USER node
 EXPOSE 4000
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 CMD ["node", "-e", "const port=process.env.PORT||4000;fetch('http://127.0.0.1:'+port+'/health/live').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
