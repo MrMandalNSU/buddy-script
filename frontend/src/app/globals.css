@@ -55,11 +55,24 @@ img { max-width: 100%; }
 .google-button img { width: 20px; height: 20px; }
 .or-divider { display: flex; align-items: center; gap: 16px; margin: 30px 0; color: var(--muted); }
 .or-divider::before, .or-divider::after { content: ""; height: 1px; flex: 1; background: var(--border); }
+.name-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .field { margin-bottom: 14px; }
 .field label { display: block; margin-bottom: 8px; color: var(--text); font-weight: 500; }
 .field input { width: 100%; height: 48px; border: 1px solid #cfd5dc; border-radius: 5px; background: var(--surface); padding: 0 14px; color: var(--text); }
 .field input[aria-invalid="true"] { border-color: #d83b3b; }
 .field-error { display: block; color: #c62f2f; font-size: 12px; margin-top: 5px; }
+.password-control { position: relative; }
+.password-control input { padding-right: 52px; }
+.password-control.has-match input { padding-right: 82px; }
+.password-visibility { width: 36px; height: 36px; padding: 0; display: grid; place-items: center; position: absolute; top: 6px; right: 7px; border: 0; border-radius: 4px; background: transparent; color: var(--muted); }
+.password-visibility:hover { color: var(--blue); background: var(--blue-soft); }
+.password-visibility svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; }
+.password-match { width: 24px; height: 36px; display: grid; place-items: center; position: absolute; top: 6px; right: 44px; color: var(--green); }
+.password-match .check-icon { width: 20px; height: 20px; }
+.password-requirements { margin: -6px 0 16px; padding: 0; display: grid; grid-template-columns: repeat(3, max-content); justify-content: space-between; gap: 8px; list-style: none; }
+.password-requirements li { min-width: 0; display: flex; align-items: center; gap: 5px; color: #7d8792; font-size: 11px; white-space: nowrap; transition: color .2s ease; }
+.password-requirements li.is-met { color: var(--green); }
+.check-icon { width: 17px; height: 17px; flex: 0 0 auto; }
 .form-options { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 18px; }
 .check { display: flex; align-items: center; gap: 9px; color: var(--muted); font-size: 13px; }
 .check input { width: 17px; height: 17px; accent-color: var(--blue); }
