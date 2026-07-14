@@ -3,7 +3,7 @@ import { PrismaNeon } from "@prisma/adapter-neon";
 import { PrismaClient } from "../src/generated/prisma/client.js";
 import type { Prisma } from "../src/generated/prisma/client.js";
 import { hashPassword } from "../src/modules/auth/password.service.js";
-import { DEMO_PASSWORD, demoCommentLikes, demoComments, demoPostLikes, demoPosts, demoSummary, demoUsers, validateDemoFixtures } from "./seed-data.js";
+import { DEMO_PASSWORD, demoCommentReactions, demoComments, demoPostReactions, demoPosts, demoSummary, demoUsers, validateDemoFixtures } from "./seed-data.js";
 
 const databaseUrl = process.env.DATABASE_URL ?? process.env.DATABASE_URL_DEV;
 if (databaseUrl === undefined) throw new Error("DATABASE_URL or DATABASE_URL_DEV is required to seed the database");
@@ -37,13 +37,23 @@ async function persistFixtures(tx: Prisma.TransactionClient, passwordHash: strin
     await tx.comment.upsert({ where: { id: reply.id }, create: { id: reply.id, ...data }, update: data });
   }
 
-  for (const like of demoPostLikes) {
-    const reactedAt = at(now, like.minutesAgo);
-    await tx.postLike.upsert({ where: { postId_userId: { postId: like.targetId, userId: like.userId } }, create: { id: like.id, postId: like.targetId, userId: like.userId, createdAt: reactedAt, updatedAt: reactedAt }, update: {} });
+  for (const reaction of demoPostReactions) {
+    const reactedAt = at(now, reaction.minutesAgo);
+    const data = { reactionType: reaction.reactionType, createdAt: reactedAt, updatedAt: reactedAt };
+    await tx.postLike.upsert({
+      where: { postId_userId: { postId: reaction.targetId, userId: reaction.userId } },
+      create: { id: reaction.id, postId: reaction.targetId, userId: reaction.userId, ...data },
+      update: data,
+    });
   }
-  for (const like of demoCommentLikes) {
-    const reactedAt = at(now, like.minutesAgo);
-    await tx.commentLike.upsert({ where: { commentId_userId: { commentId: like.targetId, userId: like.userId } }, create: { id: like.id, commentId: like.targetId, userId: like.userId, createdAt: reactedAt, updatedAt: reactedAt }, update: {} });
+  for (const reaction of demoCommentReactions) {
+    const reactedAt = at(now, reaction.minutesAgo);
+    const data = { reactionType: reaction.reactionType, createdAt: reactedAt, updatedAt: reactedAt };
+    await tx.commentLike.upsert({
+      where: { commentId_userId: { commentId: reaction.targetId, userId: reaction.userId } },
+      create: { id: reaction.id, commentId: reaction.targetId, userId: reaction.userId, ...data },
+      update: data,
+    });
   }
 
   await tx.$executeRaw`UPDATE posts p SET like_count = (SELECT count(*)::integer FROM post_likes pl WHERE pl.post_id = p.id), comment_count = (SELECT count(*)::integer FROM comments c WHERE c.post_id = p.id AND c.parent_id IS NULL)`;

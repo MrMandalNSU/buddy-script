@@ -1,7 +1,8 @@
 import "dotenv/config";
 import pino from "pino";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { demoComments, demoIds, demoPosts, demoSummary, demoUsers } from "../../prisma/seed-data.js";
+import { demoCommentReactions, demoComments, demoIds, demoPostReactions, demoPosts, demoSummary, demoUsers } from "../../prisma/seed-data.js";
+import { ReactionType } from "../../src/generated/prisma/client.js";
 import { createDatabaseClient, type DatabaseClient } from "../../src/infrastructure/database/client.js";
 import { verifyPassword } from "../../src/modules/auth/password.service.js";
 
@@ -44,6 +45,39 @@ databaseSuite("demo seed", { concurrent: false }, () => {
       expect(row.storedLikes).toBe(row.actualLikes);
       expect(row.storedComments).toBe(row.actualComments);
     }
+    const commentRows = await database.$queryRaw<{ id: string; storedReactions: number; actualReactions: number; storedReplies: number; actualReplies: number }[]>`
+      SELECT c.id, c.like_count AS "storedReactions", count(DISTINCT cl.id)::integer AS "actualReactions",
+        c.reply_count AS "storedReplies", count(DISTINCT r.id)::integer AS "actualReplies"
+      FROM comments c LEFT JOIN comment_likes cl ON cl.comment_id = c.id
+      LEFT JOIN comments r ON r.parent_id = c.id
+      WHERE c.id::text LIKE '01900000-0000-7000-8000-0000000002%'
+      GROUP BY c.id
+    `;
+    expect(commentRows).toHaveLength(demoSummary.comments + demoSummary.replies);
+    for (const row of commentRows) {
+      expect(row.storedReactions).toBe(row.actualReactions);
+      expect(row.storedReplies).toBe(row.actualReplies);
+    }
+  });
+
+  it("seeds typed reactions from real demo accounts on posts, comments, and replies", async () => {
+    const [postReactions, commentReactions] = await Promise.all([
+      database.postLike.findMany({
+        where: { id: { in: demoPostReactions.map(({ id }) => id) } },
+        include: { user: { select: { avatarUrl: true } } },
+      }),
+      database.commentLike.findMany({
+        where: { id: { in: demoCommentReactions.map(({ id }) => id) } },
+        include: { user: { select: { avatarUrl: true } }, comment: { select: { parentId: true } } },
+      }),
+    ]);
+    expect(postReactions).toHaveLength(demoSummary.postReactions);
+    expect(commentReactions).toHaveLength(demoSummary.commentReactions);
+    expect(new Set(postReactions.map(({ reactionType }) => reactionType))).toEqual(new Set(Object.values(ReactionType)));
+    expect(new Set(commentReactions.map(({ reactionType }) => reactionType))).toEqual(new Set(Object.values(ReactionType)));
+    expect(postReactions.every(({ user }) => user.avatarUrl !== null)).toBe(true);
+    expect(commentReactions.every(({ user }) => user.avatarUrl !== null)).toBe(true);
+    expect(commentReactions.some(({ comment }) => comment.parentId !== null)).toBe(true);
   });
 
   it("provides ordered public content and isolated private examples", async () => {

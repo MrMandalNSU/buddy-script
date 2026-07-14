@@ -1,4 +1,4 @@
-import { PostVisibility } from "../src/generated/prisma/client.js";
+import { PostVisibility, ReactionType } from "../src/generated/prisma/client.js";
 
 export const DEMO_PASSWORD = "Password123!";
 
@@ -43,8 +43,8 @@ export interface DemoComment {
   id: string; postId: string; authorId: string; body: string; minutesAgo: number; parentId?: string;
 }
 
-export interface DemoLike {
-  id: string; targetId: string; userId: string; minutesAgo: number;
+export interface DemoReaction {
+  id: string; targetId: string; userId: string; reactionType: ReactionType; minutesAgo: number;
 }
 
 const image = (name: string, width: number, height: number, bytes: number): StockImage => ({
@@ -93,18 +93,42 @@ export const demoComments: readonly DemoComment[] = [
   { id: "01900000-0000-7000-8000-000000000215", postId: demoIds.posts.habits, authorId: demoIds.users.radovan, parentId: "01900000-0000-7000-8000-000000000214", body: "That is a great one. Simple enough to repeat every day.", minutesAgo: 2_810 },
 ] as const;
 
-export const demoPostLikes: readonly DemoLike[] = [
-  ["301", demoIds.posts.healthy, demoIds.users.radovan, 9], ["302", demoIds.posts.healthy, demoIds.users.ava, 8], ["303", demoIds.posts.healthy, demoIds.users.alex, 7],
-  ["304", demoIds.posts.designSystems, demoIds.users.alex, 65], ["305", demoIds.posts.designSystems, demoIds.users.maya, 60], ["306", demoIds.posts.designSystems, demoIds.users.ryan, 55],
-  ["307", demoIds.posts.community, demoIds.users.karim, 180], ["308", demoIds.posts.community, demoIds.users.noah, 170], ["309", demoIds.posts.remoteWork, demoIds.users.ava, 340],
-  ["310", demoIds.posts.accessibility, demoIds.users.radovan, 660], ["311", demoIds.posts.accessibility, demoIds.users.dylan, 650], ["312", demoIds.posts.habits, demoIds.users.maya, 2_800],
-].map(([suffix, targetId, userId, minutesAgo]) => ({ id: `01900000-0000-7000-8000-000000000${suffix}`, targetId: String(targetId), userId: String(userId), minutesAgo: Number(minutesAgo) }));
+const reaction = (suffix: string, targetId: string, userId: string, reactionType: ReactionType, minutesAgo: number): DemoReaction => ({
+  id: `01900000-0000-7000-8000-000000000${suffix}`, targetId, userId, reactionType, minutesAgo,
+});
 
-export const demoCommentLikes: readonly DemoLike[] = [
-  ["401", "201", demoIds.users.alex, 8], ["402", "201", demoIds.users.ava, 7], ["403", "203", demoIds.users.karim, 6],
-  ["404", "205", demoIds.users.dylan, 62], ["405", "207", demoIds.users.ryan, 58], ["406", "208", demoIds.users.alex, 175],
-  ["407", "210", demoIds.users.maya, 335], ["408", "212", demoIds.users.ava, 650], ["409", "214", demoIds.users.radovan, 2_790],
-].map(([suffix, commentSuffix, userId, minutesAgo]) => ({ id: `01900000-0000-7000-8000-000000000${suffix}`, targetId: `01900000-0000-7000-8000-000000000${commentSuffix}`, userId: String(userId), minutesAgo: Number(minutesAgo) }));
+export const demoPostReactions: readonly DemoReaction[] = [
+  reaction("301", demoIds.posts.healthy, demoIds.users.radovan, ReactionType.LOVE, 9),
+  reaction("302", demoIds.posts.healthy, demoIds.users.ava, ReactionType.CARE, 8),
+  reaction("303", demoIds.posts.healthy, demoIds.users.alex, ReactionType.HAHA, 7),
+  reaction("304", demoIds.posts.designSystems, demoIds.users.alex, ReactionType.WOW, 65),
+  reaction("305", demoIds.posts.designSystems, demoIds.users.maya, ReactionType.SAD, 60),
+  reaction("306", demoIds.posts.designSystems, demoIds.users.ryan, ReactionType.ANGRY, 55),
+  reaction("307", demoIds.posts.community, demoIds.users.karim, ReactionType.LIKE, 180),
+  reaction("308", demoIds.posts.community, demoIds.users.noah, ReactionType.LOVE, 170),
+  reaction("309", demoIds.posts.remoteWork, demoIds.users.ava, ReactionType.CARE, 340),
+  reaction("310", demoIds.posts.accessibility, demoIds.users.radovan, ReactionType.HAHA, 660),
+  reaction("311", demoIds.posts.accessibility, demoIds.users.dylan, ReactionType.WOW, 650),
+  reaction("312", demoIds.posts.habits, demoIds.users.maya, ReactionType.SAD, 2_800),
+] as const;
+
+export const demoCommentReactions: readonly DemoReaction[] = [
+  reaction("401", "01900000-0000-7000-8000-000000000201", demoIds.users.alex, ReactionType.LOVE, 8),
+  reaction("402", "01900000-0000-7000-8000-000000000201", demoIds.users.ava, ReactionType.CARE, 7),
+  reaction("403", "01900000-0000-7000-8000-000000000203", demoIds.users.karim, ReactionType.HAHA, 6),
+  reaction("404", "01900000-0000-7000-8000-000000000205", demoIds.users.dylan, ReactionType.WOW, 62),
+  reaction("405", "01900000-0000-7000-8000-000000000207", demoIds.users.ryan, ReactionType.SAD, 58),
+  reaction("406", "01900000-0000-7000-8000-000000000208", demoIds.users.alex, ReactionType.ANGRY, 175),
+  reaction("407", "01900000-0000-7000-8000-000000000210", demoIds.users.maya, ReactionType.LIKE, 335),
+  reaction("408", "01900000-0000-7000-8000-000000000212", demoIds.users.ava, ReactionType.LOVE, 650),
+  reaction("409", "01900000-0000-7000-8000-000000000214", demoIds.users.radovan, ReactionType.CARE, 2_790),
+  reaction("410", "01900000-0000-7000-8000-000000000202", demoIds.users.ryan, ReactionType.HAHA, 5),
+  reaction("411", "01900000-0000-7000-8000-000000000204", demoIds.users.maya, ReactionType.WOW, 4),
+  reaction("412", "01900000-0000-7000-8000-000000000206", demoIds.users.noah, ReactionType.SAD, 50),
+  reaction("413", "01900000-0000-7000-8000-000000000209", demoIds.users.ava, ReactionType.ANGRY, 160),
+  reaction("414", "01900000-0000-7000-8000-000000000211", demoIds.users.dylan, ReactionType.LIKE, 330),
+  reaction("415", "01900000-0000-7000-8000-000000000215", demoIds.users.alex, ReactionType.LOVE, 2_780),
+] as const;
 
 export function validateDemoFixtures(): void {
   const unique = (values: readonly string[], label: string): void => {
@@ -114,6 +138,8 @@ export function validateDemoFixtures(): void {
   unique(demoUsers.map((item) => item.email.toLowerCase()), "user email");
   unique(demoPosts.map((item) => item.id), "post ID");
   unique(demoComments.map((item) => item.id), "comment ID");
+  unique(demoPostReactions.map((item) => item.id), "post reaction ID");
+  unique(demoCommentReactions.map((item) => item.id), "comment reaction ID");
   const userIds = new Set(demoUsers.map((item) => item.id));
   const postIds = new Set(demoPosts.map((item) => item.id));
   const comments = new Map(demoComments.map((item) => [item.id, item]));
@@ -127,6 +153,18 @@ export function validateDemoFixtures(): void {
       if (parent === undefined || parent.parentId !== undefined || parent.postId !== comment.postId) throw new Error(`Invalid demo reply ${comment.id}`);
     }
   }
+  const validateReactions = (items: readonly DemoReaction[], targetIds: ReadonlySet<string>, label: string): void => {
+    unique(items.map(({ targetId, userId }) => `${targetId}:${userId}`), `${label} target/account pair`);
+    for (const item of items) {
+      if (!targetIds.has(item.targetId) || !userIds.has(item.userId)) throw new Error(`Invalid demo ${label} ${item.id}`);
+    }
+    const seededTypes = new Set(items.map(({ reactionType }) => reactionType));
+    for (const reactionType of Object.values(ReactionType)) {
+      if (!seededTypes.has(reactionType)) throw new Error(`Missing ${reactionType} demo ${label}`);
+    }
+  };
+  validateReactions(demoPostReactions, postIds, "post reaction");
+  validateReactions(demoCommentReactions, new Set(comments.keys()), "comment reaction");
 }
 
 export const demoSummary = Object.freeze({
@@ -135,5 +173,5 @@ export const demoSummary = Object.freeze({
   privatePosts: demoPosts.filter((item) => item.visibility === PostVisibility.PRIVATE).length,
   comments: demoComments.filter((item) => item.parentId === undefined).length,
   replies: demoComments.filter((item) => item.parentId !== undefined).length,
-  postLikes: demoPostLikes.length, commentLikes: demoCommentLikes.length,
+  postReactions: demoPostReactions.length, commentReactions: demoCommentReactions.length,
 });
