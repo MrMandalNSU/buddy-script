@@ -33,6 +33,8 @@ type OpenOverlay =
   | { kind: "post-edit" | "post-audience" | "post-delete"; id: string }
   | { kind: "reaction"; target: "post" | "comment"; id: string };
 
+type PostImageData = NonNullable<Post["image"]>;
+
 const fullName = (user: Pick<User, "firstName" | "lastName">) => `${user.firstName} ${user.lastName}`;
 
 export const relativeTime = (date: string, now = Date.now()) => {
@@ -525,7 +527,6 @@ function Composer({ user }: { user: FeedUser }) {
       <VisibilityPicker value={visibility} onChange={setVisibility} />
       <button className="feed-post-button" type="button" aria-label="Post" disabled={mutation.isPending || (!body.trim() && !file)} onClick={() => mutation.mutate()}><FeedReferenceIcon name="post" /><span>{mutation.isPending ? file && progress < 100 ? `${progress}%` : "Posting" : "Post"}</span></button>
     </div>
-    {mutation.isPending && <button className="feed-cancel-upload" type="button" onClick={() => abortRef.current?.abort()}>Cancel</button>}
     {error && <p className="feed-composer-error" role="alert">{error}</p>}
   </section>;
 }
@@ -953,7 +954,17 @@ function ReactorsDialog({ target, close }: { target: { kind: "post" | "comment";
   return <dialog ref={ref} className="feed-likers-dialog" aria-labelledby="feed-reactions-title" onClose={close}><div className="feed-dialog-title"><h2 id="feed-reactions-title">Reactions</h2><button type="button" onClick={() => { if (typeof ref.current?.close === "function") ref.current.close(); else close(); }} aria-label="Close">×</button></div>{query.isLoading ? <p>Loading…</p> : reactors.length ? <ul>{reactors.map((reactor) => <li key={`${reactor.user.id}-${reactor.reactedAt}`}><div className="feed-reactor-avatar"><Avatar user={reactor.user} /><FeedReactionIcon name={reactor.reaction} size={18} /></div><span><strong>{fullName(reactor.user)}</strong><small>{reactionLabel(reactor.reaction)}</small></span></li>)}</ul> : <p>No reactions yet.</p>}{query.hasNextPage && <button className="feed-inline-button" onClick={() => query.fetchNextPage()}>Load more</button>}</dialog>;
 }
 
-function PostCard({ post, user, showReactors, showCommentReactors, menuOpen, overlay, setOverlay }: { post: Post; user: FeedUser; showReactors: () => void; showCommentReactors: (commentId: string) => void; menuOpen: boolean; overlay?: OpenOverlay; setOverlay: (overlay?: OpenOverlay) => void }) {
+function PostImage({ image, eager }: { image: PostImageData; eager: boolean }) {
+  const [state, setState] = useState<"loading" | "loaded" | "error">("loading");
+
+  return <div className={`feed-post-image is-${state}`} data-state={state} aria-busy={state === "loading"} style={{ aspectRatio: `${image.width} / ${image.height}` }}>
+    {state === "loading" && <span className="feed-post-image-skeleton" aria-hidden="true" />}
+    <Image className="feed-post-image-asset" src={image.secureUrl} alt="Image shared with this post" width={image.width} height={image.height} sizes="(max-width: 991px) 100vw, 636px" loading={eager ? "eager" : "lazy"} onLoad={() => setState("loaded")} onError={() => setState("error")} />
+    {state === "error" && <div className="feed-post-image-fallback" role="status"><FeedReferenceIcon name="image" /><span>Image could not be loaded.</span></div>}
+  </div>;
+}
+
+function PostCard({ post, user, eagerImage, showReactors, showCommentReactors, menuOpen, overlay, setOverlay }: { post: Post; user: FeedUser; eagerImage: boolean; showReactors: () => void; showCommentReactors: (commentId: string) => void; menuOpen: boolean; overlay?: OpenOverlay; setOverlay: (overlay?: OpenOverlay) => void }) {
   const client = useQueryClient();
   const isAuthor = post.author.id === user.id;
   const commentInputId = `comment-input-${post.id}`;
@@ -978,7 +989,7 @@ function PostCard({ post, user, showReactors, showCommentReactors, menuOpen, ove
   return <article className="feed-post-card">
     <header className="feed-post-head"><Avatar user={post.author} size={44} /><div><h2>{fullName(post.author)}</h2><p>{relativeTime(post.createdAt)} · {isAuthor ? <button type="button" className="feed-post-audience-button" onClick={() => setOverlay({ kind: "post-audience", id: post.id })}>{post.visibility === "public" ? "Public" : "Private"}</button> : <span>{post.visibility === "public" ? "Public" : "Private"}</span>}</p></div><div className="feed-post-menu-root" data-feed-overlay-root><button type="button" aria-label="Post menu" aria-expanded={menuOpen} onClick={() => setOverlay(menuOpen ? undefined : { kind: "post", id: post.id })}><FeedReferenceIcon name="moreVertical" /></button>{menuOpen && <div className="feed-post-menu" role="menu">{postMenuItems.map((item) => <DisabledButton className="feed-post-menu-item" label={item.label} key={item.label}><FeedReferenceIcon name={item.icon} />{item.label}</DisabledButton>)}{isAuthor && <><button type="button" role="menuitem" className="feed-post-menu-item" onClick={() => setOverlay({ kind: "post-edit", id: post.id })}><FeedReferenceIcon name="edit" />Edit Post</button><button type="button" role="menuitem" className="feed-post-menu-item" onClick={() => setOverlay({ kind: "post-delete", id: post.id })}><FeedReferenceIcon name="delete" />Delete Post</button></>}</div>}</div></header>
     {post.body && <p className="feed-post-body">{post.body}</p>}
-    {post.image && <div className="feed-post-image"><Image src={post.image.secureUrl} alt="Image shared with this post" width={post.image.width} height={post.image.height} sizes="(max-width: 991px) 100vw, 636px" /></div>}
+    {post.image && <PostImage key={post.image.secureUrl} image={post.image} eager={eagerImage} />}
     <div className="feed-post-stats"><button type="button" disabled={post.engagement.reactionCount === 0} onClick={showReactors}><span className="feed-reaction-stack">{post.reactionPreview.map((reactor) => <Avatar key={reactor.user.id} user={reactor.user} size={24} />)}{post.engagement.reactionCount > post.reactionPreview.length && <i>+{post.engagement.reactionCount - post.reactionPreview.length}</i>}</span><strong>{post.engagement.reactionCount}</strong></button><div><span>{post.engagement.commentCount} Comment</span><span>0 Share</span></div></div>
     <div className="feed-post-actions"><ReactionControl target="post" id={post.id} current={post.engagement.viewerReaction} pending={mutation.isPending} overlay={overlay} setOverlay={setOverlay} onToggle={() => mutation.mutate(post.engagement.viewerReaction === null ? "like" : null)} onSelect={(next) => { mutation.mutate(next); setOverlay(undefined); }} /><button type="button" aria-controls={commentInputId} onClick={() => document.getElementById(commentInputId)?.focus()}><FeedReferenceIcon name="comment" />Comment</button><DisabledButton label="Share post"><FeedReferenceIcon name="share" />Share</DisabledButton></div>
     <Comments post={post} user={user} inputId={commentInputId} overlay={overlay} setOverlay={setOverlay} showReactors={showCommentReactors} />
@@ -1027,6 +1038,7 @@ export function FeedApp() {
     enabled: auth.status === "authenticated",
   });
   const posts = Array.from(new Map((query.data?.pages.flatMap((page) => page.items) ?? []).map((post) => [post.id, post])).values());
+  const eagerPostImageId = posts.find((post) => post.image !== null)?.id;
   const refresh = () => { void query.refetch(); };
 
   useEffect(() => {
@@ -1055,7 +1067,7 @@ export function FeedApp() {
         {query.isError && posts.length > 0 && <div className="feed-refresh-warning" role="status"><span>Some posts may be out of date.</span><button type="button" onClick={refresh}>Refresh</button></div>}
         {query.isPending && posts.length === 0 ? <div className="feed-loading" aria-label="Loading your feed"><span /><span /><span /><p>Loading your feed…</p></div>
           : query.isError && posts.length === 0 ? <div className="feed-error" role="alert"><p>We could not load your feed.</p><button type="button" onClick={refresh}>Try again</button></div>
-            : posts.length ? <>{posts.map((post) => <PostCard key={post.id} post={post} user={auth.user} menuOpen={overlay?.kind === "post" && overlay.id === post.id} overlay={overlay} setOverlay={setOverlay} showReactors={() => setReactors({ kind: "post", id: post.id })} showCommentReactors={(id) => setReactors({ kind: "comment", id })} />)}{query.hasNextPage && <button className="feed-load-more" type="button" onClick={() => query.fetchNextPage()} disabled={query.isFetchingNextPage}>{query.isFetchingNextPage ? "Loading…" : "Load more posts"}</button>}</>
+            : posts.length ? <>{posts.map((post) => <PostCard key={post.id} post={post} user={auth.user} eagerImage={post.id === eagerPostImageId} menuOpen={overlay?.kind === "post" && overlay.id === post.id} overlay={overlay} setOverlay={setOverlay} showReactors={() => setReactors({ kind: "post", id: post.id })} showCommentReactors={(id) => setReactors({ kind: "comment", id })} />)}{query.hasNextPage && <button className="feed-load-more" type="button" onClick={() => query.fetchNextPage()} disabled={query.isFetchingNextPage}>{query.isFetchingNextPage ? "Loading…" : "Load more posts"}</button>}</>
               : <div className="feed-empty"><h2>Your feed is quiet</h2><p>Create the first post.</p></div>}
       </main>
       <RightSidebar />

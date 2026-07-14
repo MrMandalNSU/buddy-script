@@ -125,6 +125,30 @@ describe("feed cache and shell", () => {
     expect(result.pages.flatMap(({ items }) => items).filter(({ id }) => id === "new")).toHaveLength(1);
   });
 
+  it("eagerly loads only the first image-bearing post", async () => {
+    const firstImage = { ...makePost("first-image", "First image"), image: { publicId: "first", secureUrl: "https://example.com/first.jpg", version: 1, width: 800, height: 600, bytes: 100, format: "jpg" } };
+    const secondImage = { ...makePost("second-image", "Second image"), image: { publicId: "second", secureUrl: "https://example.com/second.jpg", version: 1, width: 800, height: 600, bytes: 100, format: "jpg" } };
+    repository.list.mockResolvedValue({ items: [makePost("text-only", "Text only"), firstImage, secondImage], nextCursor: null });
+
+    renderFeed();
+
+    const images = await screen.findAllByAltText("Image shared with this post");
+    expect(images).toHaveLength(2);
+    expect(images[0]).toHaveAttribute("loading", "eager");
+    expect(images[1]).toHaveAttribute("loading", "lazy");
+
+    const loadedImage = images[0]?.closest(".feed-post-image");
+    const failedImage = images[1]?.closest(".feed-post-image");
+    expect(loadedImage).toHaveAttribute("data-state", "loading");
+    expect(loadedImage?.querySelector(".feed-post-image-skeleton")).toBeInTheDocument();
+    fireEvent.load(images[0]!);
+    expect(loadedImage).toHaveAttribute("data-state", "loaded");
+    expect(loadedImage?.querySelector(".feed-post-image-skeleton")).not.toBeInTheDocument();
+    fireEvent.error(images[1]!);
+    expect(failedImage).toHaveAttribute("data-state", "error");
+    expect(within(failedImage as HTMLElement).getByText("Image could not be loaded.")).toBeInTheDocument();
+  });
+
   it("renders the desktop landmarks in left, main, right order", async () => {
     repository.list.mockResolvedValue({ items: [], nextCursor: null });
     const { container } = renderFeed();
@@ -320,6 +344,19 @@ describe("feed cache and shell", () => {
     expect(within(composer).getByRole("button", { name: "Add article" })).toBeInTheDocument();
     expect(within(composer).getByRole("combobox", { name: "Post visibility" })).toBeInTheDocument();
     expect(within(composer).getByRole("button", { name: "Post" })).toBeInTheDocument();
+  });
+
+  it("does not show a cancel action while creating a post", async () => {
+    repository.list.mockResolvedValue({ items: [], nextCursor: null });
+    repository.create.mockImplementation(() => new Promise(() => undefined));
+    const { container } = renderFeed();
+    await screen.findByText("Your feed is quiet");
+    const composer = container.querySelector<HTMLElement>(".feed-composer")!;
+    fireEvent.change(within(composer).getByLabelText("Post text"), { target: { value: "Publishing now" } });
+    fireEvent.click(within(composer).getByRole("button", { name: "Post" }));
+
+    await within(composer).findByText("Posting");
+    expect(within(composer).queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
   });
 
   it("uses a themed accessible visibility picker and applies its selection", async () => {
