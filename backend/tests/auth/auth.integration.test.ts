@@ -13,6 +13,27 @@ const databaseUrl = process.env.DATABASE_URL ?? process.env.DATABASE_URL_DEV;
 const databaseSuite = process.env.RUN_DATABASE_TESTS === "true" && databaseUrl !== undefined ? describe : describe.skip;
 const testDatabaseUrl = databaseUrl ?? "postgresql://integration-tests-disabled.invalid/buddy";
 
+describe("registration password validation pipeline", () => {
+  const environment = loadEnvironment({
+    NODE_ENV: "test", DATABASE_URL: testDatabaseUrl, ALLOWED_ORIGINS: "http://localhost:3000",
+    JWT_ACCESS_SECRET: "access".repeat(12), JWT_REFRESH_SECRET: "refresh".repeat(12),
+    JWT_ISSUER: "buddyscript-test", JWT_AUDIENCE: "buddyscript-test-web", COOKIE_SECURE: "false",
+  });
+  const database = Object.create(null) as DatabaseClient;
+  const apiRouter = Router(); apiRouter.use("/auth", createAuthRouter(database, environment));
+  const readiness = new ReadinessState(); readiness.markReady();
+  const application = createApp({ environment, readiness, apiRouter, logger: pino({ level: "silent" }) });
+
+  it("rejects a direct API request that bypasses frontend password validation", async () => {
+    const response = await request(application).post("/api/v1/auth/register").send({
+      firstName: "Direct", lastName: "Caller", email: "direct-caller@buddy.test", password: "lowercase!",
+    });
+
+    expect(response.status).toBe(422);
+    expect(response.body).toMatchObject({ success: false, error: { code: "VALIDATION_ERROR", message: "Request validation failed" } });
+  });
+});
+
 databaseSuite("authentication API", { concurrent: false }, () => {
   let database: DatabaseClient;
   let environment: Environment;

@@ -1,7 +1,11 @@
 import { z } from "zod";
 
 const email = z.email().max(320).transform((value) => value.trim());
-const password = z.string().min(8, "Password must contain at least 8 characters").max(128);
+const password = z.string()
+  .min(8, "Password must contain at least 8 characters")
+  .max(128)
+  .regex(/\p{Lu}/u, "Password must contain at least one uppercase letter")
+  .regex(/[\p{P}\p{S}]/u, "Password must contain at least one special character");
 
 export const registerSchema = z.object({
   firstName: z.string().trim().min(2).max(80),
