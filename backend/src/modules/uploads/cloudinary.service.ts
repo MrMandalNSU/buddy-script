@@ -38,6 +38,11 @@ export class CloudinaryService {
     return { publicId: result.publicId, secureUrl: result.secureUrl, version: result.version, width: result.width, height: result.height, bytes: result.bytes, format: result.format.toLowerCase() };
   }
 
+  async destroy(publicId: string): Promise<void> {
+    if (!publicId.startsWith(`${this.rootFolder}/users/`)) throw new Error("Cloudinary asset is outside the BuddyScript post folder");
+    await cloudinary.uploader.destroy(publicId, { resource_type: "image", invalidate: true });
+  }
+
   private userFolder(userId: string): string { return `${this.rootFolder}/users/${userId}/posts`; }
 }
 

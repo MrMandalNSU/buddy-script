@@ -489,6 +489,9 @@ img { max-width: 100%; }
 .feed-app .feed-post-menu-item:last-child { margin-bottom: 0; }
 .feed-app .feed-post-menu-item svg { flex: 0 0 22px; color: #1890ff; }
 .feed-app .feed-post-menu-item [data-reference-icon="bell"] path { fill: #377dff; }
+.feed-app .feed-post-menu-item:not([aria-disabled="true"]):hover { color: var(--text); }
+.feed-app .feed-post-audience-button { padding: 0; border: 0; background: transparent; color: var(--blue); font: inherit; }
+.feed-app .feed-post-audience-button:hover { text-decoration: underline; }
 .feed-app .feed-post-body { padding-top: 18px; font-size: 15px; }
 .feed-app .feed-post-stats { min-height: 58px; margin-top: 2px; padding: 10px 24px; }
 .feed-app .feed-post-stats button { gap: 8px; }
@@ -551,6 +554,42 @@ img { max-width: 100%; }
 .feed-confirm-dialog > div { margin-top: 22px; display: flex; justify-content: flex-end; gap: 9px; }
 .feed-confirm-dialog button { padding: 8px 14px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); }
 .feed-confirm-dialog button.is-danger { border-color: #d73939; background: #d73939; color: #fff; }
+.feed-post-edit-dialog,
+.feed-post-audience-dialog { width: min(620px, calc(100vw - 32px)); max-height: min(760px, calc(100vh - 32px)); padding: 0; overflow: auto; border: 0; border-radius: 10px; background: var(--surface); color: var(--text); box-shadow: 0 30px 80px rgba(0,0,0,.3); }
+.feed-post-audience-dialog { width: min(470px, calc(100vw - 32px)); }
+.feed-post-edit-dialog::backdrop,
+.feed-post-audience-dialog::backdrop { background: rgba(8,18,30,.55); }
+.feed-post-edit-dialog > form,
+.feed-post-audience-dialog > form { padding: 22px 24px 24px; }
+.feed-post-edit-dialog .feed-dialog-title,
+.feed-post-audience-dialog .feed-dialog-title { margin-bottom: 18px; }
+.feed-post-edit-dialog .feed-dialog-title h2,
+.feed-post-audience-dialog .feed-dialog-title h2 { margin: 14px 0; font-size: 20px; }
+.feed-post-edit-body { display: block; }
+.feed-post-edit-body > span { display: block; margin-bottom: 7px; color: var(--muted); font-size: 12px; }
+.feed-post-edit-body textarea { width: 100%; min-height: 120px; padding: 12px; resize: vertical; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); color: var(--text); font-size: 15px; line-height: 1.5; }
+.feed-post-edit-image { margin-top: 14px; overflow: hidden; border-radius: 8px; background: var(--surface-2); }
+.feed-post-edit-image img { display: block; width: 100%; max-height: 360px; object-fit: contain; }
+.feed-post-edit-media { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 9px; }
+.feed-post-edit-media > label,
+.feed-post-edit-media > button { min-height: 38px; padding: 8px 12px; display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font-size: 13px; cursor: pointer; }
+.feed-post-edit-media > label svg,
+.feed-post-edit-media > button svg { width: 18px; height: 18px; color: var(--blue); }
+.feed-post-upload-progress { height: 22px; margin-top: 12px; position: relative; overflow: hidden; border-radius: 11px; background: var(--surface-2); }
+.feed-post-upload-progress > span { height: 100%; display: block; background: color-mix(in srgb, var(--blue), transparent 70%); transition: width .15s ease; }
+.feed-post-upload-progress > strong { position: absolute; inset: 0; display: grid; place-items: center; font-size: 11px; }
+.feed-post-dialog-error { margin: 10px 0 0; color: #c62f2f; font-size: 12px; line-height: 1.45; }
+.feed-post-dialog-actions { margin-top: 20px; display: flex; justify-content: flex-end; gap: 9px; }
+.feed-post-dialog-actions > button { min-width: 82px; padding: 9px 14px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); }
+.feed-post-dialog-actions > button.is-primary { border-color: var(--blue); background: var(--blue); color: #fff; }
+.feed-post-dialog-actions > button:disabled { opacity: .55; cursor: default; }
+.feed-post-audience-dialog > form > p { margin: 0 0 14px; color: var(--muted); font-size: 13px; }
+.feed-post-audience-dialog > form > label { margin-top: 9px; padding: 13px; display: flex; align-items: flex-start; gap: 11px; border: 1px solid var(--border); border-radius: 8px; cursor: pointer; }
+.feed-post-audience-dialog > form > label.is-selected { border-color: var(--blue); background: color-mix(in srgb, var(--blue), transparent 95%); }
+.feed-post-audience-dialog input { margin-top: 4px; accent-color: var(--blue); }
+.feed-post-audience-dialog label span { display: flex; flex-direction: column; gap: 3px; }
+.feed-post-audience-dialog label strong { font-size: 14px; }
+.feed-post-audience-dialog label small { color: var(--muted); font-size: 12px; }
 
 @media (min-width: 1200px) and (max-width: 1399px) {
   .feed-app .feed-primary-nav > button,
@@ -591,4 +630,8 @@ img { max-width: 100%; }
   .feed-app .feed-post-card { padding-bottom: 16px; }
   .feed-app .feed-post-menu { width: min(312px, calc(100vw - 24px)); }
   .feed-app .feed-post-actions .feed-reaction-picker { left: 0; max-width: calc(100vw - 24px); transform: none; }
+  .feed-post-edit-dialog,
+  .feed-post-audience-dialog { width: calc(100vw - 24px); max-height: calc(100vh - 24px); }
+  .feed-post-edit-dialog > form,
+  .feed-post-audience-dialog > form { padding: 16px; }
 }

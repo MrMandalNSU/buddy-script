@@ -23,7 +23,7 @@ const cloudinary = createCloudinaryService(environment);
 const cache = environment.cacheEnabled ? new NodeCacheAdapter(environment.cacheMaxKeys) : undefined;
 apiRouter.use("/auth", createAuthRouter(database, environment));
 apiRouter.use(createCommentRouter(database, environment));
-apiRouter.use("/posts", createPostRouter(database, environment, cloudinary, cache));
+apiRouter.use("/posts", createPostRouter(database, environment, cloudinary, cache, logger));
 if (cloudinary !== undefined) apiRouter.use("/uploads", createUploadRouter(cloudinary, environment));
 const app = createApp({ environment, logger, readiness, apiRouter });
 const server = createServer(app);

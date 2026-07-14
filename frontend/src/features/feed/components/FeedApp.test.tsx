@@ -8,6 +8,8 @@ import { FeedApp, prependPostToFeed } from "./FeedApp";
 const repository = vi.hoisted(() => ({
   list: vi.fn(),
   create: vi.fn(),
+  update: vi.fn(),
+  delete: vi.fn(),
   setPostLike: vi.fn(),
   setPostReaction: vi.fn(),
   comments: vi.fn(),
@@ -23,6 +25,7 @@ const repository = vi.hoisted(() => ({
   postReactors: vi.fn(),
   commentReactors: vi.fn(),
 }));
+const uploadMocks = vi.hoisted(() => ({ uploadPostImage: vi.fn() }));
 const authMocks = vi.hoisted(() => ({ logout: vi.fn() }));
 const routerMocks = vi.hoisted(() => ({ replace: vi.fn() }));
 
@@ -44,6 +47,7 @@ vi.mock("@/features/auth/AuthProvider", () => ({
   }),
 }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: routerMocks.replace }) }));
+vi.mock("../upload", () => uploadMocks);
 vi.mock("next/image", () => ({
   default: (props: ImgHTMLAttributes<HTMLImageElement> & { priority?: boolean; fill?: boolean; sizes?: string; unoptimized?: boolean }) => {
     const imageProps = { ...props };
@@ -92,6 +96,8 @@ describe("feed cache and shell", () => {
     vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })));
     vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => { callback(0); return 1; });
     vi.stubGlobal("cancelAnimationFrame", vi.fn());
+    Object.defineProperty(URL, "createObjectURL", { configurable: true, value: vi.fn(() => "blob:post-preview") });
+    Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: vi.fn() });
   });
   afterEach(cleanup);
 
@@ -179,6 +185,105 @@ describe("feed cache and shell", () => {
     fireEvent.click(screen.getByRole("button", { name: "Post menu" }));
     fireEvent.pointerDown(document.body);
     expect(screen.queryByRole("button", { name: "Save Post" })).not.toBeInTheDocument();
+  });
+
+  it("shows functional post mutation controls only to the post author", async () => {
+    const ownPost = { ...makePost("own-post", "My post"), author: { id: "viewer-1", firstName: "Alex", lastName: "Morgan", avatarUrl: null } };
+    const otherPost = makePost("other-post", "Someone else's post");
+    repository.list.mockResolvedValue({ items: [ownPost, otherPost], nextCursor: null });
+    renderFeed();
+    const ownCard = (await screen.findByText("My post")).closest("article")!;
+    const otherCard = screen.getByText("Someone else's post").closest("article")!;
+
+    fireEvent.click(within(otherCard).getByRole("button", { name: "Post menu" }));
+    expect(within(otherCard).queryByRole("menuitem", { name: "Edit Post" })).not.toBeInTheDocument();
+    expect(within(otherCard).queryByRole("menuitem", { name: "Delete Post" })).not.toBeInTheDocument();
+    fireEvent.click(within(ownCard).getByRole("button", { name: "Post menu" }));
+    expect(within(ownCard).getByRole("menuitem", { name: "Edit Post" })).toBeInTheDocument();
+    expect(within(ownCard).getByRole("menuitem", { name: "Delete Post" })).toBeInTheDocument();
+    expect(within(ownCard).getByRole("button", { name: "Public" })).toBeInTheDocument();
+  });
+
+  it("edits post text and replaces its image through the signed upload flow", async () => {
+    const oldImage = { publicId: "old", secureUrl: "https://example.com/old.jpg", version: 1, width: 800, height: 600, bytes: 100, format: "jpg" };
+    const uploadedImage = { publicId: "new", secureUrl: "https://example.com/new.jpg", version: 2, width: 900, height: 700, bytes: 200, format: "jpg", signature: "signed" };
+    const original = { ...makePost("edit-post", "Original caption"), author: { id: "viewer-1", firstName: "Alex", lastName: "Morgan", avatarUrl: null }, image: oldImage };
+    const updated = { ...original, body: "Updated caption", image: { ...uploadedImage, signature: undefined } as unknown as Post["image"] };
+    repository.list.mockResolvedValueOnce({ items: [original], nextCursor: null }).mockResolvedValue({ items: [updated], nextCursor: null });
+    repository.update.mockResolvedValue(updated);
+    uploadMocks.uploadPostImage.mockResolvedValue(uploadedImage);
+    renderFeed();
+    await screen.findByText("Original caption");
+
+    fireEvent.click(screen.getByRole("button", { name: "Post menu" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Edit Post" }));
+    const dialog = screen.getByRole("dialog", { name: "Edit Post" });
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "Edit post text" }), { target: { value: "Updated caption" } });
+    const file = new File(["new-image"], "new.jpg", { type: "image/jpeg" });
+    fireEvent.change(dialog.querySelector<HTMLInputElement>('input[type="file"]')!, { target: { files: [file] } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(uploadMocks.uploadPostImage).toHaveBeenCalledWith(file, expect.any(Function), expect.any(AbortSignal)));
+    await waitFor(() => expect(repository.update).toHaveBeenCalledWith("edit-post", { body: "Updated caption", image: uploadedImage }, expect.any(AbortSignal)));
+    await screen.findByText("Updated caption");
+  });
+
+  it("removes a post image while retaining text", async () => {
+    const original = { ...makePost("remove-image-post", "Keep this text"), author: { id: "viewer-1", firstName: "Alex", lastName: "Morgan", avatarUrl: null }, image: { publicId: "old", secureUrl: "https://example.com/old.jpg", version: 1, width: 800, height: 600, bytes: 100, format: "jpg" } };
+    const updated = { ...original, image: null };
+    repository.list.mockResolvedValueOnce({ items: [original], nextCursor: null }).mockResolvedValue({ items: [updated], nextCursor: null });
+    repository.update.mockResolvedValue(updated);
+    renderFeed();
+    await screen.findByText("Keep this text");
+
+    fireEvent.click(screen.getByRole("button", { name: "Post menu" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Edit Post" }));
+    const dialog = screen.getByRole("dialog", { name: "Edit Post" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Remove photo" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(repository.update).toHaveBeenCalledWith("remove-image-post", { image: null }, expect.any(AbortSignal)));
+  });
+
+  it("retains an edit draft and inline error when updating fails", async () => {
+    const original = { ...makePost("failed-edit", "Original text"), author: { id: "viewer-1", firstName: "Alex", lastName: "Morgan", avatarUrl: null } };
+    repository.list.mockResolvedValue({ items: [original], nextCursor: null });
+    repository.update.mockRejectedValue(new Error("Update unavailable"));
+    renderFeed();
+    await screen.findByText("Original text");
+
+    fireEvent.click(screen.getByRole("button", { name: "Post menu" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Edit Post" }));
+    const textbox = screen.getByRole("textbox", { name: "Edit post text" });
+    fireEvent.change(textbox, { target: { value: "Unsaved draft" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Update unavailable");
+    expect(screen.getByRole("textbox", { name: "Edit post text" })).toHaveValue("Unsaved draft");
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "Edit Post" })).not.toBeInTheDocument();
+  });
+
+  it("changes audience separately and permanently deletes the post", async () => {
+    const original = { ...makePost("audience-post", "Audience and delete"), author: { id: "viewer-1", firstName: "Alex", lastName: "Morgan", avatarUrl: null } };
+    const privatePost = { ...original, visibility: "private" as const };
+    repository.list.mockResolvedValueOnce({ items: [original], nextCursor: null }).mockResolvedValueOnce({ items: [privatePost], nextCursor: null }).mockResolvedValue({ items: [], nextCursor: null });
+    repository.update.mockResolvedValue(privatePost);
+    repository.delete.mockResolvedValue(undefined);
+    renderFeed();
+    const card = (await screen.findByText("Audience and delete")).closest("article")!;
+
+    fireEvent.click(within(card).getByRole("button", { name: "Public" }));
+    const audienceDialog = screen.getByRole("dialog", { name: "Change audience" });
+    fireEvent.click(within(audienceDialog).getByRole("radio", { name: /Private/ }));
+    fireEvent.click(within(audienceDialog).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(repository.update).toHaveBeenCalledWith("audience-post", { visibility: "private" }));
+    await screen.findByRole("button", { name: "Private" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Post menu" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete Post" }));
+    const deleteDialog = screen.getByRole("dialog", { name: "Delete post?" });
+    fireEvent.click(within(deleteDialog).getByRole("button", { name: "Delete" }));
+    await waitFor(() => expect(repository.delete).toHaveBeenCalledWith("audience-post"));
+    await waitFor(() => expect(screen.queryByText("Audience and delete")).not.toBeInTheDocument());
   });
 
   it("includes every reference composer action alongside visibility and Post", async () => {

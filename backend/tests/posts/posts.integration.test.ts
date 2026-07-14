@@ -9,6 +9,8 @@ import { createDatabaseClient, type DatabaseClient } from "../../src/infrastruct
 import { ReadinessState } from "../../src/infrastructure/lifecycle/readiness.js";
 import { createAuthRouter } from "../../src/modules/auth/auth.routes.js";
 import { createPostRouter } from "../../src/modules/posts/post.routes.js";
+import { createCommentRouter } from "../../src/modules/comments/comment.routes.js";
+import { PostRepository } from "../../src/modules/posts/post.repository.js";
 
 const databaseUrl = process.env.DATABASE_URL ?? process.env.DATABASE_URL_DEV;
 const databaseSuite = process.env.RUN_DATABASE_TESTS === "true" && databaseUrl !== undefined ? describe : describe.skip;
@@ -30,6 +32,7 @@ databaseSuite("posts API", { concurrent: false }, () => {
     database = createDatabaseClient(testDatabaseUrl, pino({ level: "silent" }));
     const apiRouter = Router();
     apiRouter.use("/auth", createAuthRouter(database, environment));
+    apiRouter.use(createCommentRouter(database, environment));
     apiRouter.use("/posts", createPostRouter(database, environment));
     const readiness = new ReadinessState(); readiness.markReady();
     application = createApp({ environment, readiness, apiRouter, logger: pino({ level: "silent" }) });
@@ -104,6 +107,45 @@ databaseSuite("posts API", { concurrent: false }, () => {
     expect((await alex.delete(`/api/v1/posts/${publicId}/reaction`).set("x-csrf-token", alexCsrf)).body).toMatchObject({ data: { reactionCount: 1, viewerReaction: null } });
 
     expect((await alex.get("/api/v1/posts?cursor=tampered.cursor")).status).toBe(400);
+  }, 15_000);
+
+  it("updates audience and content with author privacy, retains engagement, and cascades deletion", async () => {
+    const alex = request.agent(application); const karim = request.agent(application);
+    const alexLogin = await login(alex, "alex@buddy.test"); const karimLogin = await login(karim, "karim@buddy.test");
+    const alexCsrf = csrfCookie(alexLogin); const karimCsrf = csrfCookie(karimLogin);
+    const created = await alex.post("/api/v1/posts").set("x-csrf-token", alexCsrf).send({ body: "Mutable post", visibility: "public" });
+    expect(created.status).toBe(201);
+    const postId = dataId(created); createdPostIds.push(postId);
+
+    expect((await alex.patch(`/api/v1/posts/${postId}`).send({ body: "Missing CSRF" })).status).toBe(403);
+    expect((await alex.patch(`/api/v1/posts/${postId}`).set("x-csrf-token", alexCsrf).send({})).status).toBe(422);
+    expect((await alex.patch(`/api/v1/posts/${postId}`).set("x-csrf-token", alexCsrf).send({ body: null })).status).toBe(422);
+    expect((await karim.patch(`/api/v1/posts/${postId}`).set("x-csrf-token", karimCsrf).send({ body: "Not mine" })).status).toBe(403);
+
+    const comment = await karim.post(`/api/v1/posts/${postId}/comments`).set("x-csrf-token", karimCsrf).send({ body: "Keep this comment" });
+    expect(comment.status).toBe(201);
+    expect((await karim.put(`/api/v1/posts/${postId}/reaction`).set("x-csrf-token", karimCsrf).send({ reaction: "haha" })).status).toBe(200);
+
+    const madePrivate = await alex.patch(`/api/v1/posts/${postId}`).set("x-csrf-token", alexCsrf).send({ body: "Updated post", visibility: "private" });
+    expect(madePrivate.status).toBe(200);
+    expect(madePrivate.body).toMatchObject({ data: { body: "Updated post", visibility: "private", engagement: { reactionCount: 1, commentCount: 1 } } });
+    expect((await karim.patch(`/api/v1/posts/${postId}`).set("x-csrf-token", karimCsrf).send({ visibility: "public" })).status).toBe(404);
+    expect((await karim.get(`/api/v1/posts/${postId}/comments`)).status).toBe(404);
+    const privateFeed = (await karim.get("/api/v1/posts")).body as FeedBody;
+    expect(privateFeed.data.items.some(({ id }) => id === postId)).toBe(false);
+    const staleCachedRows = await new PostRepository(database).listVisible("01900000-0000-7000-8000-000000000002", undefined, 20, [postId]);
+    expect(staleCachedRows.some(({ id }) => id === postId)).toBe(false);
+
+    const madePublic = await alex.patch(`/api/v1/posts/${postId}`).set("x-csrf-token", alexCsrf).send({ visibility: "public" });
+    expect(madePublic.body).toMatchObject({ data: { visibility: "public", engagement: { reactionCount: 1, commentCount: 1 } } });
+    expect(((await karim.get("/api/v1/posts")).body as FeedBody).data.items.some(({ id }) => id === postId)).toBe(true);
+    expect((await karim.delete(`/api/v1/posts/${postId}`).set("x-csrf-token", karimCsrf)).status).toBe(403);
+    expect((await alex.delete(`/api/v1/posts/${postId}`)).status).toBe(403);
+    expect((await alex.delete(`/api/v1/posts/${postId}`).set("x-csrf-token", alexCsrf)).status).toBe(204);
+    expect(await database.post.findUnique({ where: { id: postId } })).toBeNull();
+    expect(await database.comment.count({ where: { postId } })).toBe(0);
+    expect(await database.postLike.count({ where: { postId } })).toBe(0);
+    expect((await alex.delete(`/api/v1/posts/${postId}`).set("x-csrf-token", alexCsrf)).status).toBe(404);
   }, 15_000);
 });
 

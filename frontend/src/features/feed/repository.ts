@@ -1,10 +1,12 @@
 import { apiRequest } from "@/shared/api/client";
 import { commentSchema, likerSchema, pageSchema, postSchema, reactionSchema, reactionStateSchema, reactorSchema } from "./schemas";
-import type { Comment, CreatePostInput, Liker, Page, Post, ReactionState, ReactionType, Reactor } from "./types";
+import type { Comment, CreatePostInput, Liker, Page, Post, ReactionState, ReactionType, Reactor, UpdatePostInput } from "./types";
 const query = (cursor?: string, limit = 20) => `?limit=${limit}${cursor === undefined ? "" : `&cursor=${encodeURIComponent(cursor)}`}`;
 export const feedRepository = {
   list: (cursor?: string) => apiRequest<Page<Post>>(`/api/v1/posts${query(cursor)}`, { schema: pageSchema(postSchema) }),
   create: (input: CreatePostInput) => apiRequest<Post>("/api/v1/posts", { method: "POST", body: input, schema: postSchema }),
+  update: (postId: string, input: UpdatePostInput, signal?: AbortSignal) => apiRequest<Post>(`/api/v1/posts/${encodeURIComponent(postId)}`, { method: "PATCH", body: input, schema: postSchema, signal }),
+  delete: (postId: string) => apiRequest<void>(`/api/v1/posts/${encodeURIComponent(postId)}`, { method: "DELETE" }),
   setPostLike: (postId: string, liked: boolean) => apiRequest<{ liked: boolean; likeCount: number }>(`/api/v1/posts/${encodeURIComponent(postId)}/like`, { method: liked ? "POST" : "DELETE", schema: reactionSchema }),
   setPostReaction: (postId: string, reaction: ReactionType | null) => apiRequest<ReactionState>(`/api/v1/posts/${encodeURIComponent(postId)}/reaction`, { method: reaction === null ? "DELETE" : "PUT", ...(reaction === null ? {} : { body: { reaction } }), schema: reactionStateSchema }),
   comments: (postId: string, cursor?: string) => apiRequest<Page<Comment>>(`/api/v1/posts/${encodeURIComponent(postId)}/comments${query(cursor)}`, { schema: pageSchema(commentSchema) }),

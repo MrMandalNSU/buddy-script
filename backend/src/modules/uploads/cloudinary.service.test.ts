@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { v2 as cloudinary } from "cloudinary";
 import { CloudinaryService } from "./cloudinary.service.js";
 
@@ -15,6 +15,7 @@ function result(overrides: Partial<Parameters<CloudinaryService["verify"]>[1]> =
 }
 
 describe("Cloudinary service", () => {
+  afterEach(() => vi.restoreAllMocks());
   it("creates owner-scoped short-lived upload parameters", () => {
     expect(service.signature("user-123")).toMatchObject({
       timestamp: 1_720_000_000, folder: "buddyscript/users/user-123/posts", cloudName: "demo-cloud", apiKey: "api-key",
@@ -27,5 +28,12 @@ describe("Cloudinary service", () => {
     expect(() => service.verify("user-123", result({ signature: "tampered" }))).toThrow("signature");
     expect(() => service.verify("other-user", result())).toThrow("authenticated user");
     expect(() => service.verify("user-123", result({ bytes: 5_000_001 }))).toThrow("size");
+  });
+
+  it("destroys only assets inside the BuddyScript user post folder", async () => {
+    const destroy = vi.spyOn(cloudinary.uploader, "destroy").mockResolvedValue({ result: "ok" });
+    await service.destroy("buddyscript/users/user-123/posts/image");
+    expect(destroy).toHaveBeenCalledWith("buddyscript/users/user-123/posts/image", { resource_type: "image", invalidate: true });
+    await expect(service.destroy("outside/users/user-123/posts/image")).rejects.toThrow("outside");
   });
 });

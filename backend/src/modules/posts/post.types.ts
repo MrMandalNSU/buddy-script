@@ -5,6 +5,11 @@ export interface CreatePostInput {
   visibility: PostVisibility;
   image?: { publicId: string; secureUrl: string; version: number; width: number; height: number; bytes: number; format: string };
 }
+export interface UpdatePostInput {
+  body?: string | null;
+  visibility?: PostVisibility;
+  image?: CreatePostInput["image"] | null;
+}
 export interface PostAuthor { id: string; firstName: string; lastName: string; avatarUrl: string | null }
 export type ReactionBreakdown = Record<ReactionType, number>;
 export interface ReactorRecord { id: string; updatedAt: Date; reactionType: ReactionType; user: PostAuthor }
@@ -36,6 +41,10 @@ export interface ReactionState {
   reactionBreakdown: ReactionBreakdown;
   reactionPreview: ReactionPreviewRecord[];
 }
+export type PostMutationResult =
+  | { status: "not-found" | "forbidden" | "invalid" }
+  | { status: "updated"; post: PostRecord; previousImagePublicId: string | null }
+  | { status: "deleted"; previousImagePublicId: string | null };
 
 export const emptyReactionBreakdown = (): ReactionBreakdown => ({
   [ReactionType.LIKE]: 0,

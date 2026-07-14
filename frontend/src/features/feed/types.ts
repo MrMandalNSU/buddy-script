@@ -19,3 +19,4 @@ export type Liker = FeedUser & { likedAt: string };
 export type Reactor = { user: FeedUser; reaction: ReactionType; reactedAt: string };
 export type ReactionState = { reactionCount: number; viewerReaction: ReactionType | null; reactionBreakdown: ReactionBreakdown; reactionPreview?: ReactionPreview[] };
 export type CreatePostInput = { body?: string; visibility: Visibility; image?: VerifiedImage & { signature: string } };
+export type UpdatePostInput = { body?: string | null; visibility?: Visibility; image?: (VerifiedImage & { signature: string }) | null };

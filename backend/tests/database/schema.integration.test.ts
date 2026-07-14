@@ -57,8 +57,8 @@ databaseSuite("Neon schema integration", { concurrent: false }, () => {
 
   it("migrates existing likes to typed Like reactions", async () => {
     const [postReaction, commentReaction] = await Promise.all([
-      database.postLike.findFirst({ select: { reactionType: true, createdAt: true, updatedAt: true } }),
-      database.commentLike.findFirst({ select: { reactionType: true, createdAt: true, updatedAt: true } }),
+      database.postLike.findFirst({ where: { reactionType: ReactionType.LIKE }, orderBy: { createdAt: "asc" }, select: { reactionType: true, createdAt: true, updatedAt: true } }),
+      database.commentLike.findFirst({ where: { reactionType: ReactionType.LIKE }, orderBy: { createdAt: "asc" }, select: { reactionType: true, createdAt: true, updatedAt: true } }),
     ]);
     expect(postReaction?.reactionType).toBe(ReactionType.LIKE);
     expect(commentReaction?.reactionType).toBe(ReactionType.LIKE);

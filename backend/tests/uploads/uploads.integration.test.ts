@@ -3,7 +3,7 @@ import { v2 as cloudinarySdk } from "cloudinary";
 import { Router } from "express";
 import pino from "pino";
 import request, { type Response } from "supertest";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi, type MockInstance } from "vitest";
 import { createApp } from "../../src/app.js";
 import { loadEnvironment, type Environment } from "../../src/config/env.js";
 import { createDatabaseClient, type DatabaseClient } from "../../src/infrastructure/database/client.js";
@@ -19,6 +19,8 @@ const testDatabaseUrl = databaseUrl ?? "postgresql://integration-tests-disabled.
 
 databaseSuite("signed image uploads", { concurrent: false }, () => {
   let database: DatabaseClient; let application: ReturnType<typeof createApp>; const createdPostIds: string[] = [];
+  let cloudinary: CloudinaryService;
+  let destroy: MockInstance<CloudinaryService["destroy"]>;
   const apiSecret = "cloudinary-test-secret";
 
   beforeAll(() => {
@@ -29,7 +31,8 @@ databaseSuite("signed image uploads", { concurrent: false }, () => {
       CLOUDINARY_CLOUD_NAME: "test-cloud", CLOUDINARY_API_KEY: "test-key", CLOUDINARY_API_SECRET: apiSecret,
     });
     database = createDatabaseClient(testDatabaseUrl, pino({ level: "silent" }));
-    const cloudinary = new CloudinaryService("test-cloud", "test-key", apiSecret, "buddyscript", 5_000_000, () => 1_720_000_000_000);
+    cloudinary = new CloudinaryService("test-cloud", "test-key", apiSecret, "buddyscript", 5_000_000, () => 1_720_000_000_000);
+    destroy = vi.spyOn(cloudinary, "destroy").mockResolvedValue();
     const apiRouter = Router(); apiRouter.use("/auth", createAuthRouter(database, environment));
     apiRouter.use("/posts", createPostRouter(database, environment, cloudinary)); apiRouter.use("/uploads", createUploadRouter(cloudinary, environment));
     const readiness = new ReadinessState(); readiness.markReady();
@@ -50,10 +53,36 @@ databaseSuite("signed image uploads", { concurrent: false }, () => {
     const stored = await database.post.findUniqueOrThrow({ where: { id: postId }, select: { body: true, imagePublicId: true, imageBytes: true } });
     expect(stored).toEqual({ body: null, imagePublicId: image.publicId, imageBytes: image.bytes });
     expect((await agent.post("/api/v1/posts").set("x-csrf-token", csrf).send({ visibility: "public", image: { ...image, signature: "tampered" } })).status).toBe(422);
+
+    const replacement = uploadResult("01900000-0000-7000-8000-000000000001", "replacement");
+    const replaced = await agent.patch(`/api/v1/posts/${postId}`).set("x-csrf-token", csrf).send({ image: replacement });
+    expect(replaced.status).toBe(200);
+    expect(replaced.body).toMatchObject({ data: { image: { publicId: replacement.publicId } } });
+    expect(destroy).toHaveBeenCalledWith(image.publicId);
+    expect((await agent.patch(`/api/v1/posts/${postId}`).set("x-csrf-token", csrf).send({ image: null })).status).toBe(422);
+
+    const removed = await agent.patch(`/api/v1/posts/${postId}`).set("x-csrf-token", csrf).send({ body: "Keep the post", image: null });
+    expect(removed.status).toBe(200);
+    expect(removed.body).toMatchObject({ data: { body: "Keep the post", image: null } });
+    expect(destroy).toHaveBeenCalledWith(replacement.publicId);
+
+    const deletableImage = uploadResult("01900000-0000-7000-8000-000000000001", "delete-me");
+    const deletable = await agent.post("/api/v1/posts").set("x-csrf-token", csrf).send({ visibility: "public", image: deletableImage });
+    expect(deletable.status).toBe(201);
+    const deletableId = (deletable.body as { data: { id: string } }).data.id; createdPostIds.push(deletableId);
+    expect((await agent.delete(`/api/v1/posts/${deletableId}`).set("x-csrf-token", csrf)).status).toBe(204);
+    expect(destroy).toHaveBeenCalledWith(deletableImage.publicId);
+
+    const cleanupFailureImage = uploadResult("01900000-0000-7000-8000-000000000001", "cleanup-failure");
+    const cleanupFailurePost = await agent.post("/api/v1/posts").set("x-csrf-token", csrf).send({ visibility: "public", image: cleanupFailureImage });
+    const cleanupFailureId = (cleanupFailurePost.body as { data: { id: string } }).data.id; createdPostIds.push(cleanupFailureId);
+    destroy.mockRejectedValueOnce(new Error("Cloudinary unavailable"));
+    expect((await agent.delete(`/api/v1/posts/${cleanupFailureId}`).set("x-csrf-token", csrf)).status).toBe(204);
+    expect(await database.post.findUnique({ where: { id: cleanupFailureId } })).toBeNull();
   });
 
-  function uploadResult(userId: string) {
-    const publicId = `buddyscript/users/${userId}/posts/image`; const version = 1;
+  function uploadResult(userId: string, name = "image") {
+    const publicId = `buddyscript/users/${userId}/posts/${name}`; const version = 1;
     return {
       publicId, secureUrl: `https://res.cloudinary.com/test-cloud/image/upload/v1/${publicId}.jpg`, version,
       width: 1_200, height: 800, bytes: 120_000, format: "jpg",

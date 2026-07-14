@@ -22,7 +22,7 @@ import {
 import { useAuth } from "@/features/auth/AuthProvider";
 import type { User } from "@/features/auth/types";
 import { feedKeys, feedRepository } from "../repository";
-import type { Comment, Engagement, FeedUser, Page, Post, ReactionType, Reactor, Visibility } from "../types";
+import type { Comment, Engagement, FeedUser, Page, Post, ReactionType, Reactor, UpdatePostInput, Visibility } from "../types";
 import { uploadPostImage } from "../upload";
 import { FeedReferenceIcon, type FeedReferenceIconName } from "./FeedReferenceIcon";
 import { FeedReactionIcon, reactionColor, reactionLabel, reactionOptions } from "./FeedReactionIcon";
@@ -30,6 +30,7 @@ import { FeedReactionIcon, reactionColor, reactionLabel, reactionOptions } from 
 type OpenOverlay =
   | { kind: "notifications" | "profile" }
   | { kind: "post" | "comment"; id: string }
+  | { kind: "post-edit" | "post-audience" | "post-delete"; id: string }
   | { kind: "reaction"; target: "post" | "comment"; id: string };
 
 const fullName = (user: Pick<User, "firstName" | "lastName">) => `${user.firstName} ${user.lastName}`;
@@ -56,6 +57,22 @@ export function prependPostToFeed(
       : page.items.filter((item) => item.id !== post.id),
   }));
   return { ...data, pages };
+}
+
+function replacePostInFeed(data: InfiniteData<Page<Post>> | undefined, updated: Post) {
+  if (data === undefined) return data;
+  return {
+    ...data,
+    pages: data.pages.map((page) => ({ ...page, items: page.items.map((post) => post.id === updated.id ? updated : post) })),
+  };
+}
+
+function removePostFromFeed(data: InfiniteData<Page<Post>> | undefined, postId: string) {
+  if (data === undefined) return data;
+  return {
+    ...data,
+    pages: data.pages.map((page) => ({ ...page, items: page.items.filter((post) => post.id !== postId) })),
+  };
 }
 
 const reactionPreviewTypes = (engagement: Pick<Engagement, "reactionBreakdown">): ReactionType[] => {
@@ -611,12 +628,156 @@ function CommentItem({ comment, viewer, postAuthorId, overlay, setOverlay, showR
   </div><div className="feed-comment-actions"><ReactionControl target="comment" id={comment.id} current={comment.engagement.viewerReaction} pending={reaction.isPending} compact overlay={overlay} setOverlay={setOverlay} onToggle={() => reaction.mutate(comment.engagement.viewerReaction === null ? "like" : null)} onSelect={(next) => { reaction.mutate(next); setOverlay(undefined); }} />{comment.depth === 0 && <button type="button" onClick={() => setReplying((value) => !value)}>Reply</button>}<span>{relativeTime(comment.createdAt)}</span><button type="button" className="feed-comment-reaction-summary" disabled={comment.engagement.reactionCount === 0} aria-label={`${comment.engagement.reactionCount} reactions${previewReactions.length ? `: ${previewReactions.map((type) => reactionLabel(type)).join(", ")}` : ""}`} onClick={() => showReactors(comment.id)}><span className="feed-comment-reaction-icons" aria-hidden="true">{previewReactions.map((type) => <FeedReactionIcon key={type} name={type} size={14} />)}</span><span>{comment.engagement.reactionCount}</span></button></div>{error && <p className="feed-comment-error" role="alert">{error}</p>}{comment.depth === 0 && <>{replies.data?.pages.flatMap((page) => page.items).map((reply) => <CommentItem key={reply.id} comment={reply} viewer={viewer} postAuthorId={postAuthorId} overlay={overlay} setOverlay={setOverlay} showReactors={showReactors} />)}{replies.hasNextPage && <button className="feed-inline-button" type="button" onClick={() => replies.fetchNextPage()}>Load more replies</button>}{replying && <CommentForm placeholder={`Reply to ${comment.author.firstName}…`} submit={add} />}</>}</div>{confirming && <CommentDeleteDialog comment={comment} pending={deletion.isPending} close={() => setConfirming(false)} confirm={() => deletion.mutate()} />}</div>;
 }
 
+function PostEditDialog({ post, close }: { post: Post; close: () => void }) {
+  const ref = useRef<HTMLDialogElement>(null);
+  const inputId = useId();
+  const client = useQueryClient();
+  const [body, setBody] = useState(post.body ?? "");
+  const [file, setFile] = useState<File>();
+  const [preview, setPreview] = useState<string>();
+  const [imageRemoved, setImageRemoved] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [error, setError] = useState("");
+  const abortRef = useRef<AbortController | undefined>(undefined);
+  const normalizedBody = body.trim();
+  const bodyChanged = normalizedBody !== (post.body ?? "");
+  const imageChanged = file !== undefined || (imageRemoved && post.image !== null);
+  const finalHasImage = file !== undefined || (!imageRemoved && post.image !== null);
+  const imageUrl = preview ?? (imageRemoved ? undefined : post.image?.secureUrl);
+
+  useEffect(() => {
+    const dialog = ref.current;
+    if (dialog === null) return;
+    if (typeof dialog.showModal === "function") dialog.showModal();
+    else dialog.open = true;
+  }, []);
+  useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
+  useEffect(() => () => abortRef.current?.abort(), []);
+
+  const mutation = useMutation({
+    mutationFn: async () => {
+      const controller = new AbortController();
+      abortRef.current = controller;
+      let image: UpdatePostInput["image"] | undefined;
+      if (file !== undefined) image = await uploadPostImage(file, setProgress, controller.signal);
+      else if (imageRemoved && post.image !== null) image = null;
+      const input: UpdatePostInput = {
+        ...(bodyChanged ? { body: normalizedBody || null } : {}),
+        ...(imageChanged ? { image } : {}),
+      };
+      return feedRepository.update(post.id, input, controller.signal);
+    },
+    onSuccess: (updated) => {
+      client.setQueryData<InfiniteData<Page<Post>>>(feedKeys.all, (data) => replacePostInFeed(data, updated));
+      setError("");
+      void client.invalidateQueries({ queryKey: feedKeys.all });
+      close();
+    },
+    onError: (cause) => setError(cause instanceof Error ? cause.message : "Post could not be updated."),
+  });
+
+  const choose = (selected?: File) => {
+    setError("");
+    if (selected === undefined) return;
+    if (!["image/jpeg", "image/png", "image/webp"].includes(selected.type) || selected.size > 5_000_000) {
+      setError("Choose a JPG, PNG, or WebP image smaller than 5 MB.");
+      return;
+    }
+    if (preview) URL.revokeObjectURL(preview);
+    setFile(selected);
+    setPreview(URL.createObjectURL(selected));
+    setImageRemoved(false);
+    setProgress(0);
+  };
+  const removeImage = () => {
+    if (preview) URL.revokeObjectURL(preview);
+    setPreview(undefined);
+    setFile(undefined);
+    setImageRemoved(true);
+    setProgress(0);
+  };
+
+  return <dialog ref={ref} className="feed-post-edit-dialog" data-feed-overlay-root aria-labelledby={`edit-post-${post.id}`} onClose={close}>
+    <form onSubmit={(event) => { event.preventDefault(); if (!mutation.isPending) mutation.mutate(); }}>
+      <div className="feed-dialog-title"><h2 id={`edit-post-${post.id}`}>Edit Post</h2><button type="button" onClick={close} disabled={mutation.isPending} aria-label="Close">×</button></div>
+      <label className="feed-post-edit-body"><span>Post text</span><textarea aria-label="Edit post text" value={body} maxLength={5000} onChange={(event) => setBody(event.target.value)} /></label>
+      {imageUrl && <div className="feed-post-edit-image"><Image src={imageUrl} alt="Post image preview" width={700} height={400} unoptimized={preview !== undefined} /></div>}
+      <div className="feed-post-edit-media"><label htmlFor={inputId} role="button" tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") document.getElementById(inputId)?.click(); }}><FeedReferenceIcon name="image" />{imageUrl ? "Replace photo" : "Add photo"}<input id={inputId} hidden type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => choose(event.target.files?.[0])} /></label>{imageUrl && <button type="button" onClick={removeImage}><FeedReferenceIcon name="delete" />Remove photo</button>}</div>
+      {mutation.isPending && file && <div className="feed-post-upload-progress"><span style={{ width: `${progress}%` }} /><strong>{progress}%</strong></div>}
+      {error && <p className="feed-post-dialog-error" role="alert">{error}</p>}
+      {!normalizedBody && !finalHasImage && <p className="feed-post-dialog-error">Post text or image is required.</p>}
+      <div className="feed-post-dialog-actions"><button type="button" onClick={() => mutation.isPending ? abortRef.current?.abort() : close()}>{mutation.isPending ? "Cancel upload" : "Cancel"}</button><button type="submit" className="is-primary" disabled={mutation.isPending || (!bodyChanged && !imageChanged) || (!normalizedBody && !finalHasImage)}>{mutation.isPending ? file && progress < 100 ? `Uploading ${progress}%` : "Saving…" : "Save"}</button></div>
+    </form>
+  </dialog>;
+}
+
+function PostAudienceDialog({ post, close }: { post: Post; close: () => void }) {
+  const ref = useRef<HTMLDialogElement>(null);
+  const client = useQueryClient();
+  const [visibility, setVisibility] = useState<Visibility>(post.visibility);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    const dialog = ref.current;
+    if (dialog === null) return;
+    if (typeof dialog.showModal === "function") dialog.showModal();
+    else dialog.open = true;
+  }, []);
+  const mutation = useMutation({
+    mutationFn: () => feedRepository.update(post.id, { visibility }),
+    onSuccess: (updated) => {
+      client.setQueryData<InfiniteData<Page<Post>>>(feedKeys.all, (data) => replacePostInFeed(data, updated));
+      void client.invalidateQueries({ queryKey: feedKeys.all });
+      close();
+    },
+    onError: (cause) => setError(cause instanceof Error ? cause.message : "Audience could not be changed."),
+  });
+  return <dialog ref={ref} className="feed-post-audience-dialog" data-feed-overlay-root aria-labelledby={`audience-post-${post.id}`} onClose={close}>
+    <form onSubmit={(event) => { event.preventDefault(); mutation.mutate(); }}>
+      <div className="feed-dialog-title"><h2 id={`audience-post-${post.id}`}>Change audience</h2><button type="button" onClick={close} disabled={mutation.isPending} aria-label="Close">×</button></div>
+      <p>Choose who can see this post.</p>
+      <label className={visibility === "public" ? "is-selected" : ""}><input type="radio" name={`audience-${post.id}`} value="public" checked={visibility === "public"} onChange={() => setVisibility("public")} /><span><strong>Public</strong><small>Anyone in the community can see this post.</small></span></label>
+      <label className={visibility === "private" ? "is-selected" : ""}><input type="radio" name={`audience-${post.id}`} value="private" checked={visibility === "private"} onChange={() => setVisibility("private")} /><span><strong>Private</strong><small>Only you can see this post.</small></span></label>
+      {error && <p className="feed-post-dialog-error" role="alert">{error}</p>}
+      <div className="feed-post-dialog-actions"><button type="button" onClick={close} disabled={mutation.isPending}>Cancel</button><button type="submit" className="is-primary" disabled={mutation.isPending || visibility === post.visibility}>{mutation.isPending ? "Saving…" : "Save"}</button></div>
+    </form>
+  </dialog>;
+}
+
+function PostDeleteDialog({ post, close }: { post: Post; close: () => void }) {
+  const ref = useRef<HTMLDialogElement>(null);
+  const client = useQueryClient();
+  const [error, setError] = useState("");
+  useEffect(() => {
+    const dialog = ref.current;
+    if (dialog === null) return;
+    if (typeof dialog.showModal === "function") dialog.showModal();
+    else dialog.open = true;
+  }, []);
+  const mutation = useMutation({
+    mutationFn: () => feedRepository.delete(post.id),
+    onSuccess: () => {
+      client.setQueryData<InfiniteData<Page<Post>>>(feedKeys.all, (data) => removePostFromFeed(data, post.id));
+      client.removeQueries({ queryKey: feedKeys.comments(post.id), exact: true });
+      client.removeQueries({ queryKey: feedKeys.reactors("post", post.id), exact: true });
+      client.removeQueries({ queryKey: ["replies"] });
+      client.removeQueries({ queryKey: ["reactors", "comment"] });
+      void client.invalidateQueries({ queryKey: feedKeys.all });
+      close();
+    },
+    onError: (cause) => setError(cause instanceof Error ? cause.message : "Post could not be deleted."),
+  });
+  return <dialog ref={ref} className="feed-confirm-dialog" data-feed-overlay-root aria-labelledby={`delete-post-${post.id}`} onClose={close}>
+    <h2 id={`delete-post-${post.id}`}>Delete post?</h2>
+    <p>This post, its comments, replies, and reactions will be permanently deleted.</p>
+    {error && <p className="feed-post-dialog-error" role="alert">{error}</p>}
+    <div><button type="button" onClick={close} disabled={mutation.isPending}>Cancel</button><button className="is-danger" type="button" onClick={() => mutation.mutate()} disabled={mutation.isPending}>{mutation.isPending ? "Deleting…" : "Delete"}</button></div>
+  </dialog>;
+}
+
 const postMenuItems: Array<{ label: string; icon: FeedReferenceIconName }> = [
   { label: "Save Post", icon: "postSave" },
   { label: "Turn On Notification", icon: "bell" },
   { label: "Hide", icon: "hide" },
-  { label: "Edit Post", icon: "edit" },
-  { label: "Delete Post", icon: "delete" },
 ];
 
 function Comments({ post, user, overlay, setOverlay, showReactors }: { post: Post; user: FeedUser; overlay?: OpenOverlay; setOverlay: (overlay?: OpenOverlay) => void; showReactors: (commentId: string) => void }) {
@@ -670,6 +831,7 @@ function ReactorsDialog({ target, close }: { target: { kind: "post" | "comment";
 
 function PostCard({ post, user, showReactors, showCommentReactors, menuOpen, overlay, setOverlay }: { post: Post; user: FeedUser; showReactors: () => void; showCommentReactors: (commentId: string) => void; menuOpen: boolean; overlay?: OpenOverlay; setOverlay: (overlay?: OpenOverlay) => void }) {
   const client = useQueryClient();
+  const isAuthor = post.author.id === user.id;
   const mutation = useMutation({
     mutationFn: (next: ReactionType | null) => feedRepository.setPostReaction(post.id, next),
     onMutate: async (next) => {
@@ -689,12 +851,15 @@ function PostCard({ post, user, showReactors, showCommentReactors, menuOpen, ove
   });
 
   return <article className="feed-post-card">
-    <header className="feed-post-head"><Avatar user={post.author} size={44} /><div><h2>{fullName(post.author)}</h2><p>{relativeTime(post.createdAt)} · {post.visibility === "public" ? "Public" : "Private"}</p></div><div className="feed-post-menu-root" data-feed-overlay-root><button type="button" aria-label="Post menu" aria-expanded={menuOpen} onClick={() => setOverlay(menuOpen ? undefined : { kind: "post", id: post.id })}><FeedReferenceIcon name="moreVertical" /></button>{menuOpen && <div className="feed-post-menu" role="menu">{postMenuItems.map((item) => <DisabledButton className="feed-post-menu-item" label={item.label} key={item.label}><FeedReferenceIcon name={item.icon} />{item.label}</DisabledButton>)}</div>}</div></header>
+    <header className="feed-post-head"><Avatar user={post.author} size={44} /><div><h2>{fullName(post.author)}</h2><p>{relativeTime(post.createdAt)} · {isAuthor ? <button type="button" className="feed-post-audience-button" onClick={() => setOverlay({ kind: "post-audience", id: post.id })}>{post.visibility === "public" ? "Public" : "Private"}</button> : <span>{post.visibility === "public" ? "Public" : "Private"}</span>}</p></div><div className="feed-post-menu-root" data-feed-overlay-root><button type="button" aria-label="Post menu" aria-expanded={menuOpen} onClick={() => setOverlay(menuOpen ? undefined : { kind: "post", id: post.id })}><FeedReferenceIcon name="moreVertical" /></button>{menuOpen && <div className="feed-post-menu" role="menu">{postMenuItems.map((item) => <DisabledButton className="feed-post-menu-item" label={item.label} key={item.label}><FeedReferenceIcon name={item.icon} />{item.label}</DisabledButton>)}{isAuthor && <><button type="button" role="menuitem" className="feed-post-menu-item" onClick={() => setOverlay({ kind: "post-edit", id: post.id })}><FeedReferenceIcon name="edit" />Edit Post</button><button type="button" role="menuitem" className="feed-post-menu-item" onClick={() => setOverlay({ kind: "post-delete", id: post.id })}><FeedReferenceIcon name="delete" />Delete Post</button></>}</div>}</div></header>
     {post.body && <p className="feed-post-body">{post.body}</p>}
     {post.image && <div className="feed-post-image"><Image src={post.image.secureUrl} alt="Image shared with this post" width={post.image.width} height={post.image.height} sizes="(max-width: 991px) 100vw, 636px" /></div>}
     <div className="feed-post-stats"><button type="button" disabled={post.engagement.reactionCount === 0} onClick={showReactors}><span className="feed-reaction-stack">{post.reactionPreview.map((reactor) => <Avatar key={reactor.user.id} user={reactor.user} size={24} />)}{post.engagement.reactionCount > post.reactionPreview.length && <i>+{post.engagement.reactionCount - post.reactionPreview.length}</i>}</span><strong>{post.engagement.reactionCount}</strong></button><div><span>{post.engagement.commentCount} Comment</span><span>0 Share</span></div></div>
     <div className="feed-post-actions"><ReactionControl target="post" id={post.id} current={post.engagement.viewerReaction} pending={mutation.isPending} overlay={overlay} setOverlay={setOverlay} onToggle={() => mutation.mutate(post.engagement.viewerReaction === null ? "like" : null)} onSelect={(next) => { mutation.mutate(next); setOverlay(undefined); }} /><button type="button" onClick={() => document.getElementById(`comment-${post.id}`)?.focus()}><FeedReferenceIcon name="comment" />Comment</button><DisabledButton label="Share post"><FeedReferenceIcon name="share" />Share</DisabledButton></div>
     <div id={`comment-${post.id}`} tabIndex={-1}><Comments post={post} user={user} overlay={overlay} setOverlay={setOverlay} showReactors={showCommentReactors} /></div>
+    {overlay?.kind === "post-edit" && overlay.id === post.id && <PostEditDialog post={post} close={() => setOverlay(undefined)} />}
+    {overlay?.kind === "post-audience" && overlay.id === post.id && <PostAudienceDialog post={post} close={() => setOverlay(undefined)} />}
+    {overlay?.kind === "post-delete" && overlay.id === post.id && <PostDeleteDialog post={post} close={() => setOverlay(undefined)} />}
   </article>;
 }
 

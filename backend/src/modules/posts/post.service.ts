@@ -1,7 +1,7 @@
 import { normalizePageLimit, takePage } from "../../infrastructure/database/pagination.js";
 import { AppError } from "../../shared/errors/app-error.js";
 import type { CursorService, TimelineCursor } from "../../shared/pagination/cursor.service.js";
-import type { CreatePostRequest, PageQuery, ReactionBodyRequest } from "./post.schemas.js";
+import type { CreatePostRequest, PageQuery, ReactionBodyRequest, UpdatePostRequest } from "./post.schemas.js";
 import { toPostVisibility, type PostRepository } from "./post.repository.js";
 import type { LikerRecord, PostRecord } from "./post.types.js";
 import type { CachePort } from "../../infrastructure/cache/cache.port.js";
@@ -9,6 +9,7 @@ import { PostVisibility, ReactionType } from "../../generated/prisma/client.js";
 import type { CloudinaryService } from "../uploads/cloudinary.service.js";
 import { commentDto } from "../comments/comment.dto.js";
 import { reactionBreakdownDto, reactionPreviewDto, reactionValue, toReactionType } from "./reaction.dto.js";
+import type { Logger } from "pino";
 
 export class PostService {
   constructor(
@@ -17,6 +18,7 @@ export class PostService {
     readonly cloudinary?: CloudinaryService,
     readonly cache?: CachePort,
     readonly publicFeedTtlSeconds = 5,
+    readonly logger?: Pick<Logger, "warn">,
   ) {}
 
   async list(viewerId: string, query: PageQuery) {
@@ -37,6 +39,34 @@ export class PostService {
     });
     if (created.visibility === PostVisibility.PUBLIC) this.cache?.deleteByPrefix("feed:public-head:");
     return postDto(created);
+  }
+
+  async update(viewerId: string, postId: string, input: UpdatePostRequest) {
+    const image = input.image === undefined ? undefined : input.image === null ? null : this.verifyImage(viewerId, input.image);
+    const result = await this.repository.update(postId, viewerId, {
+      ...(input.body === undefined ? {} : { body: input.body === null ? null : input.body.trim() }),
+      ...(input.visibility === undefined ? {} : { visibility: toPostVisibility(input.visibility) }),
+      ...(image === undefined ? {} : { image }),
+    });
+    if (result.status === "not-found") throw notFound();
+    if (result.status === "forbidden") throw forbidden();
+    if (result.status === "invalid") throw emptyPost();
+    if (result.status !== "updated") throw new Error("Post update returned an invalid result");
+    this.cache?.deleteByPrefix("feed:public-head:");
+    const currentImagePublicId = result.post.image?.publicId ?? null;
+    if (result.previousImagePublicId !== null && result.previousImagePublicId !== currentImagePublicId) {
+      await this.cleanupImage(result.previousImagePublicId, "replaced or removed");
+    }
+    return postDto(result.post);
+  }
+
+  async delete(viewerId: string, postId: string): Promise<void> {
+    const result = await this.repository.delete(postId, viewerId);
+    if (result.status === "not-found") throw notFound();
+    if (result.status === "forbidden") throw forbidden();
+    if (result.status !== "deleted") throw new Error("Post deletion returned an invalid result");
+    this.cache?.deleteByPrefix("feed:public-head:");
+    if (result.previousImagePublicId !== null) await this.cleanupImage(result.previousImagePublicId, "deleted");
   }
 
   async setLike(viewerId: string, postId: string, liked: boolean) {
@@ -81,6 +111,14 @@ export class PostService {
     if (this.cloudinary === undefined) throw new AppError(503, "INTERNAL_ERROR", "Image uploads are not configured");
     return this.cloudinary.verify(viewerId, image);
   }
+  private async cleanupImage(publicId: string, reason: string): Promise<void> {
+    if (this.cloudinary === undefined) return;
+    try {
+      await this.cloudinary.destroy(publicId);
+    } catch (error) {
+      this.logger?.warn({ err: error, publicId, reason }, "Cloudinary post image cleanup failed");
+    }
+  }
 }
 
 function postDto(post: PostRecord) {
@@ -108,3 +146,5 @@ function reactionStateDto(state: { reactionCount: number; viewerReaction: Reacti
   };
 }
 function notFound(): AppError { return new AppError(404, "NOT_FOUND", "Post was not found"); }
+function forbidden(): AppError { return new AppError(403, "FORBIDDEN", "Only the post author may change this post"); }
+function emptyPost(): AppError { return new AppError(422, "VALIDATION_ERROR", "Post text or image is required"); }

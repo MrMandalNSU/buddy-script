@@ -11,6 +11,8 @@ import {
   type ReactionBreakdown,
   type ReactionState,
   type ReactorRecord,
+  type PostMutationResult,
+  type UpdatePostInput,
 } from "./post.types.js";
 
 const authorSelect = { id: true, firstName: true, lastName: true, avatarUrl: true } as const;
@@ -42,7 +44,7 @@ export class PostRepository {
         AND: [
           publicHeadIds === undefined
             ? { OR: [{ visibility: "PUBLIC" }, { authorId: viewerId }] }
-            : { OR: [{ id: { in: publicHeadIds } }, { visibility: "PRIVATE", authorId: viewerId }] },
+            : { OR: [{ id: { in: publicHeadIds }, visibility: "PUBLIC" }, { visibility: "PRIVATE", authorId: viewerId }] },
           ...(cursor === undefined ? [] : [{ OR: [{ createdAt: { lt: cursor.createdAt } }, { createdAt: cursor.createdAt, id: { lt: cursor.id } }] }]),
         ],
       },
@@ -76,6 +78,51 @@ export class PostRepository {
       select: postSelect(viewerId),
     });
     return (await this.hydrate(rows, viewerId))[0] ?? null;
+  }
+
+  async update(postId: string, viewerId: string, input: UpdatePostInput): Promise<PostMutationResult> {
+    const result = await withTransaction(this.database, async (transaction) => {
+      const target = await transaction.post.findUnique({
+        where: { id: postId },
+        select: { authorId: true, visibility: true, body: true, imagePublicId: true },
+      });
+      if (target === null || (target.authorId !== viewerId && target.visibility === "PRIVATE")) return { status: "not-found" as const };
+      if (target.authorId !== viewerId) return { status: "forbidden" as const };
+      const nextBody = input.body === undefined ? target.body : input.body;
+      const nextImagePublicId = input.image === undefined ? target.imagePublicId : input.image?.publicId ?? null;
+      if (nextBody === null && nextImagePublicId === null) return { status: "invalid" as const };
+      await transaction.post.update({
+        where: { id: postId },
+        data: {
+          ...(input.body === undefined ? {} : { body: input.body }),
+          ...(input.visibility === undefined ? {} : { visibility: input.visibility }),
+          ...(input.image === undefined ? {} : input.image === null ? {
+            imagePublicId: null, imageSecureUrl: null, imageVersion: null, imageWidth: null,
+            imageHeight: null, imageBytes: null, imageFormat: null,
+          } : {
+            imagePublicId: input.image.publicId, imageSecureUrl: input.image.secureUrl, imageVersion: input.image.version,
+            imageWidth: input.image.width, imageHeight: input.image.height, imageBytes: input.image.bytes, imageFormat: input.image.format,
+          }),
+        },
+      });
+      return { status: "updated" as const, previousImagePublicId: target.imagePublicId };
+    });
+    if (result.status !== "updated") return result;
+    const post = await this.findVisibleById(postId, viewerId);
+    if (post === null) throw new Error("Updated post could not be loaded");
+    return { ...result, post };
+  }
+
+  delete(postId: string, viewerId: string): Promise<PostMutationResult> {
+    return withTransaction(this.database, async (transaction) => {
+      const target = await transaction.post.findUnique({
+        where: { id: postId }, select: { authorId: true, visibility: true, imagePublicId: true },
+      });
+      if (target === null || (target.authorId !== viewerId && target.visibility === "PRIVATE")) return { status: "not-found" };
+      if (target.authorId !== viewerId) return { status: "forbidden" };
+      await transaction.post.delete({ where: { id: postId } });
+      return { status: "deleted", previousImagePublicId: target.imagePublicId };
+    });
   }
 
   setReaction(postId: string, viewerId: string, reactionType: ReactionType | null): Promise<ReactionState | null> {
