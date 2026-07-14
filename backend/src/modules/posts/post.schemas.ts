@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { reactionValues } from "./reaction.dto.js";
 
 export const createPostSchema = z.object({
   body: z.string().trim().min(1).max(5_000).optional(),
@@ -11,6 +12,7 @@ export const createPostSchema = z.object({
 }).strict().refine(({ body, image }) => body !== undefined || image !== undefined, { message: "Post text or image is required", path: ["body"] });
 
 export const postParamsSchema = z.object({ postId: z.uuid() }).strict();
+export const reactionBodySchema = z.object({ reaction: z.enum(reactionValues) }).strict();
 export const pageQuerySchema = z.object({
   cursor: z.string().min(10).max(2_048).optional(),
   limit: z.coerce.number().int().min(1).max(50).optional(),
@@ -18,3 +20,4 @@ export const pageQuerySchema = z.object({
 
 export type CreatePostRequest = z.infer<typeof createPostSchema>;
 export type PageQuery = z.infer<typeof pageQuerySchema>;
+export type ReactionBodyRequest = z.infer<typeof reactionBodySchema>;

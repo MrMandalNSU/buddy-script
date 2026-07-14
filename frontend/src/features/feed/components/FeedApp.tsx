@@ -5,6 +5,8 @@ import {
   useMutation,
   useQueryClient,
   type InfiniteData,
+  type QueryClient,
+  type QueryKey,
 } from "@tanstack/react-query";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -14,15 +16,21 @@ import {
   useRef,
   useState,
   type FormEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
 } from "react";
 import { useAuth } from "@/features/auth/AuthProvider";
 import type { User } from "@/features/auth/types";
 import { feedKeys, feedRepository } from "../repository";
-import type { Comment, FeedUser, Liker, Page, Post, Visibility } from "../types";
+import type { Comment, Engagement, FeedUser, Page, Post, ReactionType, Reactor, Visibility } from "../types";
 import { uploadPostImage } from "../upload";
 import { FeedReferenceIcon, type FeedReferenceIconName } from "./FeedReferenceIcon";
+import { FeedReactionIcon, reactionColor, reactionLabel, reactionOptions } from "./FeedReactionIcon";
 
-type OpenOverlay = { kind: "notifications" | "profile" } | { kind: "post"; id: string };
+type OpenOverlay =
+  | { kind: "notifications" | "profile" }
+  | { kind: "post" | "comment"; id: string }
+  | { kind: "reaction"; target: "post" | "comment"; id: string };
 
 const fullName = (user: Pick<User, "firstName" | "lastName">) => `${user.firstName} ${user.lastName}`;
 
@@ -48,6 +56,107 @@ export function prependPostToFeed(
       : page.items.filter((item) => item.id !== post.id),
   }));
   return { ...data, pages };
+}
+
+const reactionPreviewTypes = (engagement: Pick<Engagement, "reactionBreakdown">): ReactionType[] => {
+  return reactionOptions
+    .map((option, index) => ({ ...option, index, count: engagement.reactionBreakdown[option.type] }))
+    .filter(({ count }) => count > 0)
+    .sort((left, right) => right.count - left.count || left.index - right.index)
+    .slice(0, 3)
+    .map(({ type }) => type);
+};
+
+function withReaction<T extends { engagement: Engagement }>(item: T, next: ReactionType | null): T {
+  const previous = item.engagement.viewerReaction;
+  const breakdown = { ...item.engagement.reactionBreakdown };
+  if (previous !== null) breakdown[previous] = Math.max(0, breakdown[previous] - 1);
+  if (next !== null) breakdown[next] += 1;
+  const delta = previous === null && next !== null ? 1 : previous !== null && next === null ? -1 : 0;
+  const reactionCount = Math.max(0, item.engagement.reactionCount + delta);
+  return {
+    ...item,
+    engagement: {
+      ...item.engagement,
+      reactionCount,
+      likeCount: reactionCount,
+      viewerReaction: next,
+      likedByViewer: next !== null,
+      reactionBreakdown: breakdown,
+    },
+  } as T;
+}
+
+function updatePostReaction(post: Post, next: ReactionType | null, user: FeedUser): Post {
+  const updated = withReaction(post, next);
+  const others = post.reactionPreview.filter(({ user: reactor }) => reactor.id !== user.id);
+  return {
+    ...updated,
+    reactionPreview: next === null ? others : [{ user, reaction: next, reactedAt: new Date().toISOString() }, ...others].slice(0, 5),
+  };
+}
+
+type CommentCacheSnapshot = {
+  feed: InfiniteData<Page<Post>> | undefined;
+  entries: Array<[QueryKey, unknown]>;
+};
+
+function snapshotCommentCaches(client: QueryClient): CommentCacheSnapshot {
+  return {
+    feed: client.getQueryData<InfiniteData<Page<Post>>>(feedKeys.all),
+    entries: [
+      ...client.getQueriesData({ queryKey: ["comments"] }),
+      ...client.getQueriesData({ queryKey: ["replies"] }),
+    ],
+  };
+}
+
+function restoreCommentCaches(client: QueryClient, snapshot?: CommentCacheSnapshot) {
+  if (snapshot === undefined) return;
+  client.setQueryData(feedKeys.all, snapshot.feed);
+  for (const [key, data] of snapshot.entries) client.setQueryData(key, data);
+}
+
+function updateCommentCaches(client: QueryClient, commentId: string, update: (comment: Comment) => Comment | null) {
+  const updatePage = (data: InfiniteData<Page<Comment>> | undefined) => data === undefined ? data : ({
+    ...data,
+    pages: data.pages.map((page) => ({ ...page, items: page.items.flatMap((comment) => {
+      if (comment.id !== commentId) return [comment];
+      const next = update(comment);
+      return next === null ? [] : [next];
+    }) })),
+  });
+  client.setQueriesData<InfiniteData<Page<Comment>>>({ queryKey: ["comments"] }, updatePage);
+  client.setQueriesData<InfiniteData<Page<Comment>>>({ queryKey: ["replies"] }, updatePage);
+  client.setQueryData<InfiniteData<Page<Post>>>(feedKeys.all, (data) => data === undefined ? data : ({
+    ...data,
+    pages: data.pages.map((page) => ({
+      ...page,
+      items: page.items.map((post) => ({
+        ...post,
+        commentPreview: post.commentPreview.flatMap((comment) => {
+          if (comment.id !== commentId) return [comment];
+          const next = update(comment);
+          return next === null ? [] : [next];
+        }),
+      })),
+    })),
+  }));
+}
+
+function optimisticallyDeleteComment(client: QueryClient, comment: Comment) {
+  updateCommentCaches(client, comment.id, () => null);
+  if (comment.parentId !== null) {
+    updateCommentCaches(client, comment.parentId, (parent) => ({ ...parent, engagement: { ...parent.engagement, replyCount: Math.max(0, parent.engagement.replyCount - 1) } }));
+  } else {
+    client.setQueryData<InfiniteData<Page<Post>>>(feedKeys.all, (data) => data === undefined ? data : ({
+      ...data,
+      pages: data.pages.map((page) => ({
+        ...page,
+        items: page.items.map((post) => post.id === comment.postId ? { ...post, engagement: { ...post.engagement, commentCount: Math.max(0, post.engagement.commentCount - 1) } } : post),
+      })),
+    }));
+  }
 }
 
 
@@ -307,9 +416,110 @@ function CommentForm({ placeholder, submit }: { placeholder: string; submit: (bo
   return <form className="feed-comment-form" onSubmit={onSubmit}><input value={body} onChange={(event) => setBody(event.target.value)} placeholder={placeholder} aria-label={placeholder} /><div className="feed-comment-extras" aria-hidden="true"><FeedReferenceIcon name="microphone" /><FeedReferenceIcon name="image" /></div><button disabled={pending || !body.trim()} aria-label="Post comment"><FeedReferenceIcon name="post" /></button>{error && <small role="alert">{error}</small>}</form>;
 }
 
-function CommentItem({ comment, showLikers }: { comment: Comment; showLikers: (commentId: string) => void }) {
+function ReactionControl({
+  target, id, current, pending, compact = false, overlay, setOverlay, onToggle, onSelect,
+}: {
+  target: "post" | "comment";
+  id: string;
+  current: ReactionType | null;
+  pending: boolean;
+  compact?: boolean;
+  overlay?: OpenOverlay;
+  setOverlay: (overlay?: OpenOverlay) => void;
+  onToggle: () => void;
+  onSelect: (reaction: ReactionType) => void;
+}) {
+  const openTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const suppressClick = useRef(false);
+  const open = overlay?.kind === "reaction" && overlay.target === target && overlay.id === id;
+  const show = () => setOverlay({ kind: "reaction", target, id });
+  const clearTimers = () => {
+    if (openTimer.current) clearTimeout(openTimer.current);
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    if (longPressTimer.current) clearTimeout(longPressTimer.current);
+  };
+
+  useEffect(() => clearTimers, []);
+
+  const pointerDown = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (event.pointerType !== "touch") return;
+    longPressTimer.current = setTimeout(() => {
+      suppressClick.current = true;
+      show();
+    }, 450);
+  };
+  const pointerUp = () => {
+    if (longPressTimer.current) clearTimeout(longPressTimer.current);
+  };
+
+  return <div
+    className={`feed-reaction-control ${compact ? "is-compact" : ""}`}
+    data-feed-overlay-root
+    onPointerEnter={(event) => {
+      if (event.pointerType === "touch") return;
+      if (closeTimer.current) clearTimeout(closeTimer.current);
+      openTimer.current = setTimeout(show, 300);
+    }}
+    onPointerLeave={(event) => {
+      if (event.pointerType === "touch") return;
+      if (openTimer.current) clearTimeout(openTimer.current);
+      closeTimer.current = setTimeout(() => { if (open) setOverlay(undefined); }, 250);
+    }}
+  >
+    {open && <div className="feed-reaction-picker" role="menu" aria-label="Choose a reaction">
+      {reactionOptions.map((option) => <button type="button" role="menuitem" aria-label={option.label} title={option.label} key={option.type} onClick={() => onSelect(option.type)}><FeedReactionIcon name={option.type} size={compact ? 28 : 36} /><span>{option.label}</span></button>)}
+    </div>}
+    <button
+      type="button"
+      className={current === null ? "" : "is-reacted"}
+      aria-haspopup="menu"
+      aria-expanded={open}
+      disabled={pending}
+      style={current === null ? undefined : { color: reactionColor(current) }}
+      onFocus={show}
+      onPointerDown={pointerDown}
+      onPointerUp={pointerUp}
+      onPointerCancel={pointerUp}
+      onClick={(event) => {
+        if (suppressClick.current) {
+          event.preventDefault();
+          suppressClick.current = false;
+          return;
+        }
+        onToggle();
+      }}
+    >{current === null ? compact ? null : <FeedReferenceIcon name="reaction" /> : <FeedReactionIcon name={current} size={compact ? 16 : 22} />}{reactionLabel(current)}</button>
+  </div>;
+}
+
+function CommentDeleteDialog({ comment, pending, close, confirm }: { comment: Comment; pending: boolean; close: () => void; confirm: () => void }) {
+  const ref = useRef<HTMLDialogElement>(null);
+  const titleId = `delete-comment-${comment.id}`;
+  useEffect(() => {
+    const dialog = ref.current;
+    if (dialog === null) return;
+    if (typeof dialog.showModal === "function") dialog.showModal();
+    else dialog.open = true;
+  }, []);
+  return <dialog ref={ref} className="feed-confirm-dialog" aria-labelledby={titleId} onClose={close}>
+    <h2 id={titleId}>Delete comment?</h2>
+    <p>{comment.depth === 0 && comment.engagement.replyCount > 0 ? "This comment and all of its replies will be permanently deleted." : "This comment will be permanently deleted."}</p>
+    <div><button type="button" onClick={() => { if (typeof ref.current?.close === "function") ref.current.close(); else close(); }} disabled={pending}>Cancel</button><button className="is-danger" type="button" onClick={confirm} disabled={pending}>{pending ? "Deleting…" : "Delete"}</button></div>
+  </dialog>;
+}
+
+function CommentItem({ comment, viewer, postAuthorId, overlay, setOverlay, showReactors }: { comment: Comment; viewer: FeedUser; postAuthorId: string; overlay?: OpenOverlay; setOverlay: (overlay?: OpenOverlay) => void; showReactors: (commentId: string) => void }) {
   const client = useQueryClient();
   const [replying, setReplying] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(comment.body);
+  const [confirming, setConfirming] = useState(false);
+  const [error, setError] = useState("");
+  const menuOpen = overlay?.kind === "comment" && overlay.id === comment.id;
+  const canEdit = viewer.id === comment.author.id;
+  const canDelete = canEdit || viewer.id === postAuthorId;
   const replies = useInfiniteQuery({
     queryKey: feedKeys.replies(comment.id),
     queryFn: ({ pageParam }) => feedRepository.replies(comment.id, pageParam),
@@ -318,8 +528,63 @@ function CommentItem({ comment, showLikers }: { comment: Comment; showLikers: (c
     enabled: comment.depth === 0 && (replying || comment.engagement.replyCount > 0),
   });
   const reaction = useMutation({
-    mutationFn: () => feedRepository.setCommentLike(comment.id, !comment.engagement.likedByViewer),
-    onSuccess: () => client.invalidateQueries({ queryKey: comment.parentId ? feedKeys.replies(comment.parentId) : feedKeys.comments(comment.postId) }),
+    mutationFn: (next: ReactionType | null) => feedRepository.setCommentReaction(comment.id, next),
+    onMutate: async (next) => {
+      await Promise.all([client.cancelQueries({ queryKey: feedKeys.all }), client.cancelQueries({ queryKey: ["comments"] }), client.cancelQueries({ queryKey: ["replies"] })]);
+      const snapshot = snapshotCommentCaches(client);
+      updateCommentCaches(client, comment.id, (current) => withReaction(current, next));
+      return snapshot;
+    },
+    onError: (cause, _next, snapshot) => {
+      restoreCommentCaches(client, snapshot);
+      setError(cause instanceof Error ? cause.message : "Reaction could not be saved.");
+    },
+    onSettled: () => Promise.all([
+      client.invalidateQueries({ queryKey: feedKeys.all }),
+      client.invalidateQueries({ queryKey: comment.parentId ? feedKeys.replies(comment.parentId) : feedKeys.comments(comment.postId) }),
+    ]),
+  });
+  const edit = useMutation({
+    mutationFn: (body: string) => feedRepository.updateComment(comment.id, body),
+    onMutate: async (body) => {
+      const snapshot = snapshotCommentCaches(client);
+      updateCommentCaches(client, comment.id, (current) => ({ ...current, body, updatedAt: new Date().toISOString() }));
+      return snapshot;
+    },
+    onSuccess: (updated) => {
+      updateCommentCaches(client, comment.id, () => updated);
+      setEditing(false);
+      setError("");
+      setOverlay(undefined);
+    },
+    onError: (cause, _body, snapshot) => {
+      restoreCommentCaches(client, snapshot);
+      setError(cause instanceof Error ? cause.message : "Comment could not be updated.");
+    },
+    onSettled: () => client.invalidateQueries({ queryKey: feedKeys.all }),
+  });
+  const deletion = useMutation({
+    mutationFn: () => feedRepository.deleteComment(comment.id),
+    onMutate: async () => {
+      const snapshot = snapshotCommentCaches(client);
+      optimisticallyDeleteComment(client, comment);
+      return snapshot;
+    },
+    onSuccess: () => {
+      setConfirming(false);
+      setOverlay(undefined);
+      client.removeQueries({ queryKey: feedKeys.replies(comment.id) });
+    },
+    onError: (cause, _variables, snapshot) => {
+      restoreCommentCaches(client, snapshot);
+      setConfirming(false);
+      setError(cause instanceof Error ? cause.message : "Comment could not be deleted.");
+    },
+    onSettled: () => Promise.all([
+      client.invalidateQueries({ queryKey: feedKeys.all }),
+      client.invalidateQueries({ queryKey: feedKeys.comments(comment.postId) }),
+      ...(comment.parentId === null ? [] : [client.invalidateQueries({ queryKey: feedKeys.replies(comment.parentId) })]),
+    ]),
   });
   const add = async (body: string) => {
     await feedRepository.addReply(comment.id, body);
@@ -327,7 +592,23 @@ function CommentItem({ comment, showLikers }: { comment: Comment; showLikers: (c
     setReplying(false);
   };
 
-  return <div className={`feed-comment ${comment.depth ? "is-reply" : ""}`}><Avatar user={comment.author} size={36} /><div className="feed-comment-content"><div className="feed-comment-bubble"><strong>{fullName(comment.author)}</strong><p>{comment.body}</p></div><div className="feed-comment-actions"><button type="button" className={comment.engagement.likedByViewer ? "is-liked" : ""} onClick={() => reaction.mutate()}>{comment.engagement.likedByViewer ? "Unlike" : "Like"}</button>{comment.depth === 0 && <button type="button" onClick={() => setReplying((value) => !value)}>Reply</button>}<span>{relativeTime(comment.createdAt)}</span><button type="button" onClick={() => showLikers(comment.id)}><span aria-hidden="true">♥</span> {comment.engagement.likeCount}</button></div>{comment.depth === 0 && <>{replies.data?.pages.flatMap((page) => page.items).map((reply) => <CommentItem key={reply.id} comment={reply} showLikers={showLikers} />)}{replies.hasNextPage && <button className="feed-inline-button" type="button" onClick={() => replies.fetchNextPage()}>Load more replies</button>}{replying && <CommentForm placeholder={`Reply to ${comment.author.firstName}…`} submit={add} />}</>}</div></div>;
+  const save = () => {
+    const body = draft.trim();
+    if (body && body !== comment.body) edit.mutate(body);
+    else setEditing(false);
+  };
+  const editKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === "Escape") { setDraft(comment.body); setEditing(false); }
+    if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) { event.preventDefault(); save(); }
+  };
+
+  const previewReactions = reactionPreviewTypes(comment.engagement);
+
+  return <div className={`feed-comment ${comment.depth ? "is-reply" : ""}`}><Avatar user={comment.author} size={36} /><div className="feed-comment-content"><div className="feed-comment-bubble">
+    <strong>{fullName(comment.author)}</strong>
+    {editing ? <form className="feed-comment-edit" onSubmit={(event) => { event.preventDefault(); save(); }}><textarea autoFocus aria-label="Edit comment" maxLength={2000} value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={editKeyDown} /><div><button type="button" onClick={() => { setDraft(comment.body); setEditing(false); }}>Cancel</button><button type="submit" disabled={edit.isPending || !draft.trim()}>Save</button></div></form> : <p>{comment.body}</p>}
+    {canDelete && !editing && <div className="feed-comment-menu-root" data-feed-overlay-root><button type="button" aria-label="Comment options" aria-expanded={menuOpen} onClick={() => setOverlay(menuOpen ? undefined : { kind: "comment", id: comment.id })}><FeedReferenceIcon name="moreVertical" /></button>{menuOpen && <div className="feed-comment-menu" role="menu">{canEdit && <button type="button" role="menuitem" onClick={() => { setDraft(comment.body); setEditing(true); setOverlay(undefined); }}><FeedReferenceIcon name="edit" />Edit</button>}<button type="button" role="menuitem" onClick={() => { setConfirming(true); setOverlay(undefined); }}><FeedReferenceIcon name="delete" />Delete</button></div>}</div>}
+  </div><div className="feed-comment-actions"><ReactionControl target="comment" id={comment.id} current={comment.engagement.viewerReaction} pending={reaction.isPending} compact overlay={overlay} setOverlay={setOverlay} onToggle={() => reaction.mutate(comment.engagement.viewerReaction === null ? "like" : null)} onSelect={(next) => { reaction.mutate(next); setOverlay(undefined); }} />{comment.depth === 0 && <button type="button" onClick={() => setReplying((value) => !value)}>Reply</button>}<span>{relativeTime(comment.createdAt)}</span><button type="button" className="feed-comment-reaction-summary" disabled={comment.engagement.reactionCount === 0} aria-label={`${comment.engagement.reactionCount} reactions${previewReactions.length ? `: ${previewReactions.map((type) => reactionLabel(type)).join(", ")}` : ""}`} onClick={() => showReactors(comment.id)}><span className="feed-comment-reaction-icons" aria-hidden="true">{previewReactions.map((type) => <FeedReactionIcon key={type} name={type} size={14} />)}</span><span>{comment.engagement.reactionCount}</span></button></div>{error && <p className="feed-comment-error" role="alert">{error}</p>}{comment.depth === 0 && <>{replies.data?.pages.flatMap((page) => page.items).map((reply) => <CommentItem key={reply.id} comment={reply} viewer={viewer} postAuthorId={postAuthorId} overlay={overlay} setOverlay={setOverlay} showReactors={showReactors} />)}{replies.hasNextPage && <button className="feed-inline-button" type="button" onClick={() => replies.fetchNextPage()}>Load more replies</button>}{replying && <CommentForm placeholder={`Reply to ${comment.author.firstName}…`} submit={add} />}</>}</div>{confirming && <CommentDeleteDialog comment={comment} pending={deletion.isPending} close={() => setConfirming(false)} confirm={() => deletion.mutate()} />}</div>;
 }
 
 const postMenuItems: Array<{ label: string; icon: FeedReferenceIconName }> = [
@@ -338,7 +619,7 @@ const postMenuItems: Array<{ label: string; icon: FeedReferenceIconName }> = [
   { label: "Delete Post", icon: "delete" },
 ];
 
-function Comments({ post, user, showLikers }: { post: Post; user: FeedUser; showLikers: (commentId: string) => void }) {
+function Comments({ post, user, overlay, setOverlay, showReactors }: { post: Post; user: FeedUser; overlay?: OpenOverlay; setOverlay: (overlay?: OpenOverlay) => void; showReactors: (commentId: string) => void }) {
   const client = useQueryClient();
   const [expanded, setExpanded] = useState(false);
   const comments = useInfiniteQuery({
@@ -361,46 +642,44 @@ function Comments({ post, user, showLikers }: { post: Post; user: FeedUser; show
   return <div className="feed-comments">
     {post.engagement.commentCount > post.commentPreview.length && !expanded && <button type="button" className="feed-previous-comments" onClick={() => setExpanded(true)}>View all {post.engagement.commentCount} comments</button>}
     {comments.isLoading && <p className="feed-comments-loading">Loading comments…</p>}
-    {items.map((comment) => <CommentItem key={comment.id} comment={comment} showLikers={showLikers} />)}
+    {items.map((comment) => <CommentItem key={comment.id} comment={comment} viewer={user} postAuthorId={post.author.id} overlay={overlay} setOverlay={setOverlay} showReactors={showReactors} />)}
     {comments.hasNextPage && <button type="button" className="feed-inline-button" onClick={() => comments.fetchNextPage()}>Load more comments</button>}
     <div className="feed-comment-entry"><Avatar user={user} size={36} /><CommentForm placeholder="Write a comment" submit={add} /></div>
   </div>;
 }
 
-function LikersDialog({ target, close }: { target: { kind: "post" | "comment"; id: string }; close: () => void }) {
+function ReactorsDialog({ target, close }: { target: { kind: "post" | "comment"; id: string }; close: () => void }) {
   const ref = useRef<HTMLDialogElement>(null);
   const query = useInfiniteQuery({
-    queryKey: feedKeys.likers(target.kind, target.id),
-    queryFn: ({ pageParam }) => target.kind === "post" ? feedRepository.postLikers(target.id, pageParam) : feedRepository.commentLikers(target.id, pageParam),
+    queryKey: feedKeys.reactors(target.kind, target.id),
+    queryFn: ({ pageParam }) => target.kind === "post" ? feedRepository.postReactors(target.id, pageParam) : feedRepository.commentReactors(target.id, pageParam),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (page) => page.nextCursor ?? undefined,
   });
 
-  useEffect(() => ref.current?.showModal(), []);
-  const users: Liker[] = query.data?.pages.flatMap((page) => page.items) ?? [];
+  useEffect(() => {
+    const dialog = ref.current;
+    if (dialog === null) return;
+    if (typeof dialog.showModal === "function") dialog.showModal();
+    else dialog.open = true;
+  }, []);
+  const reactors: Reactor[] = query.data?.pages.flatMap((page) => page.items) ?? [];
 
-  return <dialog ref={ref} className="feed-likers-dialog" onClose={close}><div className="feed-dialog-title"><h2>Liked by</h2><button type="button" onClick={() => ref.current?.close()} aria-label="Close">×</button></div>{query.isLoading ? <p>Loading…</p> : users.length ? <ul>{users.map((user) => <li key={`${user.id}-${user.likedAt}`}><Avatar user={user} /><span><strong>{fullName(user)}</strong><small>BuddyScript member</small></span></li>)}</ul> : <p>No likes yet.</p>}{query.hasNextPage && <button className="feed-inline-button" onClick={() => query.fetchNextPage()}>Load more</button>}</dialog>;
+  return <dialog ref={ref} className="feed-likers-dialog" aria-labelledby="feed-reactions-title" onClose={close}><div className="feed-dialog-title"><h2 id="feed-reactions-title">Reactions</h2><button type="button" onClick={() => { if (typeof ref.current?.close === "function") ref.current.close(); else close(); }} aria-label="Close">×</button></div>{query.isLoading ? <p>Loading…</p> : reactors.length ? <ul>{reactors.map((reactor) => <li key={`${reactor.user.id}-${reactor.reactedAt}`}><div className="feed-reactor-avatar"><Avatar user={reactor.user} /><FeedReactionIcon name={reactor.reaction} size={18} /></div><span><strong>{fullName(reactor.user)}</strong><small>{reactionLabel(reactor.reaction)}</small></span></li>)}</ul> : <p>No reactions yet.</p>}{query.hasNextPage && <button className="feed-inline-button" onClick={() => query.fetchNextPage()}>Load more</button>}</dialog>;
 }
 
-function PostCard({ post, user, showLikers, showCommentLikers, menuOpen, setOverlay }: { post: Post; user: FeedUser; showLikers: () => void; showCommentLikers: (commentId: string) => void; menuOpen: boolean; setOverlay: (overlay?: OpenOverlay) => void }) {
+function PostCard({ post, user, showReactors, showCommentReactors, menuOpen, overlay, setOverlay }: { post: Post; user: FeedUser; showReactors: () => void; showCommentReactors: (commentId: string) => void; menuOpen: boolean; overlay?: OpenOverlay; setOverlay: (overlay?: OpenOverlay) => void }) {
   const client = useQueryClient();
   const mutation = useMutation({
-    mutationFn: () => feedRepository.setPostLike(post.id, !post.engagement.likedByViewer),
-    onMutate: async () => {
+    mutationFn: (next: ReactionType | null) => feedRepository.setPostReaction(post.id, next),
+    onMutate: async (next) => {
       await client.cancelQueries({ queryKey: feedKeys.all });
       const previous = client.getQueryData<InfiniteData<Page<Post>>>(feedKeys.all);
       client.setQueryData<InfiniteData<Page<Post>>>(feedKeys.all, (data) => data && ({
         ...data,
         pages: data.pages.map((page) => ({
           ...page,
-          items: page.items.map((item) => item.id === post.id ? {
-            ...item,
-            engagement: {
-              ...item.engagement,
-              likedByViewer: !item.engagement.likedByViewer,
-              likeCount: Math.max(0, item.engagement.likeCount + (item.engagement.likedByViewer ? -1 : 1)),
-            },
-          } : item),
+          items: page.items.map((item) => item.id === post.id ? updatePostReaction(item, next, user) : item),
         })),
       }));
       return previous;
@@ -413,9 +692,9 @@ function PostCard({ post, user, showLikers, showCommentLikers, menuOpen, setOver
     <header className="feed-post-head"><Avatar user={post.author} size={44} /><div><h2>{fullName(post.author)}</h2><p>{relativeTime(post.createdAt)} · {post.visibility === "public" ? "Public" : "Private"}</p></div><div className="feed-post-menu-root" data-feed-overlay-root><button type="button" aria-label="Post menu" aria-expanded={menuOpen} onClick={() => setOverlay(menuOpen ? undefined : { kind: "post", id: post.id })}><FeedReferenceIcon name="moreVertical" /></button>{menuOpen && <div className="feed-post-menu" role="menu">{postMenuItems.map((item) => <DisabledButton className="feed-post-menu-item" label={item.label} key={item.label}><FeedReferenceIcon name={item.icon} />{item.label}</DisabledButton>)}</div>}</div></header>
     {post.body && <p className="feed-post-body">{post.body}</p>}
     {post.image && <div className="feed-post-image"><Image src={post.image.secureUrl} alt="Image shared with this post" width={post.image.width} height={post.image.height} sizes="(max-width: 991px) 100vw, 636px" /></div>}
-    <div className="feed-post-stats"><button type="button" onClick={showLikers}><span className="feed-reaction-stack">{[1, 2, 3, 4, 5].map((asset) => <Image key={asset} src={`/assets/react_img${asset}.png`} alt="" width={24} height={24} />)}</span><strong>{post.engagement.likeCount}</strong></button><div><span>{post.engagement.commentCount} Comment</span><span>0 Share</span></div></div>
-    <div className="feed-post-actions"><button type="button" disabled={mutation.isPending} className={post.engagement.likedByViewer ? "is-liked" : ""} onClick={() => mutation.mutate()}><FeedReferenceIcon name="reaction" />{post.engagement.likedByViewer ? "Unlike" : "Like"}</button><button type="button" onClick={() => document.getElementById(`comment-${post.id}`)?.focus()}><FeedReferenceIcon name="comment" />Comment</button><DisabledButton label="Share post"><FeedReferenceIcon name="share" />Share</DisabledButton></div>
-    <div id={`comment-${post.id}`} tabIndex={-1}><Comments post={post} user={user} showLikers={showCommentLikers} /></div>
+    <div className="feed-post-stats"><button type="button" disabled={post.engagement.reactionCount === 0} onClick={showReactors}><span className="feed-reaction-stack">{post.reactionPreview.map((reactor) => <Avatar key={reactor.user.id} user={reactor.user} size={24} />)}{post.engagement.reactionCount > post.reactionPreview.length && <i>+{post.engagement.reactionCount - post.reactionPreview.length}</i>}</span><strong>{post.engagement.reactionCount}</strong></button><div><span>{post.engagement.commentCount} Comment</span><span>0 Share</span></div></div>
+    <div className="feed-post-actions"><ReactionControl target="post" id={post.id} current={post.engagement.viewerReaction} pending={mutation.isPending} overlay={overlay} setOverlay={setOverlay} onToggle={() => mutation.mutate(post.engagement.viewerReaction === null ? "like" : null)} onSelect={(next) => { mutation.mutate(next); setOverlay(undefined); }} /><button type="button" onClick={() => document.getElementById(`comment-${post.id}`)?.focus()}><FeedReferenceIcon name="comment" />Comment</button><DisabledButton label="Share post"><FeedReferenceIcon name="share" />Share</DisabledButton></div>
+    <div id={`comment-${post.id}`} tabIndex={-1}><Comments post={post} user={user} overlay={overlay} setOverlay={setOverlay} showReactors={showCommentReactors} /></div>
   </article>;
 }
 
@@ -447,8 +726,9 @@ function MobileNavigation() {
 
 export function FeedApp() {
   const auth = useAuth();
-  const [likers, setLikers] = useState<{ kind: "post" | "comment"; id: string }>();
+  const [reactors, setReactors] = useState<{ kind: "post" | "comment"; id: string }>();
   const [overlay, setOverlay] = useState<OpenOverlay>();
+  const [focusModality, setFocusModality] = useState<"pointer" | "keyboard">("pointer");
   const query = useInfiniteQuery({
     queryKey: feedKeys.all,
     queryFn: ({ pageParam }) => feedRepository.list(pageParam),
@@ -474,7 +754,7 @@ export function FeedApp() {
 
   if (auth.status !== "authenticated") return null;
 
-  return <div className="feed-app">
+  return <div className="feed-app" data-focus-modality={focusModality} onKeyDownCapture={(event) => { if (event.key === "Tab") setFocusModality("keyboard"); }} onPointerDownCapture={() => setFocusModality("pointer")}>
     <ThemeToggle />
     <Header user={auth.user} overlay={overlay} setOverlay={setOverlay} />
     <div className="feed-container feed-shell">
@@ -485,12 +765,12 @@ export function FeedApp() {
         {query.isError && posts.length > 0 && <div className="feed-refresh-warning" role="status"><span>Some posts may be out of date.</span><button type="button" onClick={refresh}>Refresh</button></div>}
         {query.isPending && posts.length === 0 ? <div className="feed-loading" aria-label="Loading your feed"><span /><span /><span /><p>Loading your feed…</p></div>
           : query.isError && posts.length === 0 ? <div className="feed-error" role="alert"><p>We could not load your feed.</p><button type="button" onClick={refresh}>Try again</button></div>
-            : posts.length ? <>{posts.map((post) => <PostCard key={post.id} post={post} user={auth.user} menuOpen={overlay?.kind === "post" && overlay.id === post.id} setOverlay={setOverlay} showLikers={() => setLikers({ kind: "post", id: post.id })} showCommentLikers={(id) => setLikers({ kind: "comment", id })} />)}{query.hasNextPage && <button className="feed-load-more" type="button" onClick={() => query.fetchNextPage()} disabled={query.isFetchingNextPage}>{query.isFetchingNextPage ? "Loading…" : "Load more posts"}</button>}</>
+            : posts.length ? <>{posts.map((post) => <PostCard key={post.id} post={post} user={auth.user} menuOpen={overlay?.kind === "post" && overlay.id === post.id} overlay={overlay} setOverlay={setOverlay} showReactors={() => setReactors({ kind: "post", id: post.id })} showCommentReactors={(id) => setReactors({ kind: "comment", id })} />)}{query.hasNextPage && <button className="feed-load-more" type="button" onClick={() => query.fetchNextPage()} disabled={query.isFetchingNextPage}>{query.isFetchingNextPage ? "Loading…" : "Load more posts"}</button>}</>
               : <div className="feed-empty"><h2>Your feed is quiet</h2><p>Create the first post.</p></div>}
       </main>
       <RightSidebar />
     </div>
     <MobileNavigation />
-    {likers && <LikersDialog target={likers} close={() => setLikers(undefined)} />}
+    {reactors && <ReactorsDialog target={reactors} close={() => setReactors(undefined)} />}
   </div>;
 }

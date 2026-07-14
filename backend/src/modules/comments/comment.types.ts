@@ -1,4 +1,5 @@
-import type { PostAuthor, ReactionState } from "../posts/post.types.js";
+import type { ReactionType } from "../../generated/prisma/client.js";
+import type { PostAuthor, ReactionBreakdown, ReactionState, ReactorRecord } from "../posts/post.types.js";
 
 export interface CommentRecord {
   id: string;
@@ -8,11 +9,18 @@ export interface CommentRecord {
   body: string;
   likeCount: number;
   replyCount: number;
-  likedByViewer: boolean;
+  viewerReaction: ReactionType | null;
+  reactionBreakdown: ReactionBreakdown;
   createdAt: Date;
   updatedAt: Date;
   author: PostAuthor;
 }
 
 export interface CommentLikerRecord { id: string; createdAt: Date; user: PostAuthor }
-export type CommentReactionState = ReactionState;
+export type CommentReactionState = Omit<ReactionState, "reactionPreview">;
+export type CommentReactorRecord = ReactorRecord;
+export type CommentMutationResult =
+  | { status: "not-found" }
+  | { status: "forbidden" }
+  | { status: "updated"; comment: CommentRecord }
+  | { status: "deleted" };

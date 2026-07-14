@@ -86,8 +86,25 @@ databaseSuite("posts API", { concurrent: false }, () => {
     expect((unlike.body as ReactionBody).data).toEqual({ liked: false, likeCount: 0 });
     expect((unlikeAgain.body as ReactionBody).data).toEqual({ liked: false, likeCount: 0 });
 
+    const love = await alex.put(`/api/v1/posts/${publicId}/reaction`).set("x-csrf-token", alexCsrf).send({ reaction: "love" });
+    expect(love.body).toMatchObject({ data: { reactionCount: 1, viewerReaction: "love", reactionBreakdown: { love: 1 } } });
+    const haha = await karim.put(`/api/v1/posts/${publicId}/reaction`).set("x-csrf-token", karimCsrf).send({ reaction: "haha" });
+    expect(haha.body).toMatchObject({ data: { reactionCount: 2, viewerReaction: "haha", reactionBreakdown: { love: 1, haha: 1 } } });
+    const changed = await alex.put(`/api/v1/posts/${publicId}/reaction`).set("x-csrf-token", alexCsrf).send({ reaction: "care" });
+    expect(changed.body).toMatchObject({ data: { reactionCount: 2, viewerReaction: "care", reactionBreakdown: { love: 0, care: 1, haha: 1 } } });
+
+    const reactors = (await alex.get(`/api/v1/posts/${publicId}/reactors`)).body as ReactorsBody;
+    expect(reactors.data.items.some(({ reaction, user }) => reaction === "care" && user.firstName === "Alex")).toBe(true);
+    expect(reactors.data.items.some(({ reaction, user }) => reaction === "haha" && user.firstName === "Karim")).toBe(true);
+    expect(reactors.data.items[0]?.user).not.toHaveProperty("email");
+    const reactedFeed = (await alex.get("/api/v1/posts")).body as DetailedFeedBody;
+    const reactedPost = reactedFeed.data.items.find(({ id }) => id === publicId);
+    expect(reactedPost).toMatchObject({ engagement: { reactionCount: 2, viewerReaction: "care" } });
+    expect(reactedPost?.reactionPreview.map(({ user }) => user.firstName)).toEqual(expect.arrayContaining(["Alex", "Karim"]));
+    expect((await alex.delete(`/api/v1/posts/${publicId}/reaction`).set("x-csrf-token", alexCsrf)).body).toMatchObject({ data: { reactionCount: 1, viewerReaction: null } });
+
     expect((await alex.get("/api/v1/posts?cursor=tampered.cursor")).status).toBe(400);
-  });
+  }, 15_000);
 });
 
 async function login(agent: ReturnType<typeof request.agent>, email: string): Promise<Response> {
@@ -107,3 +124,5 @@ function dataId(response: Response): string {
 interface FeedBody { data: { items: { id: string }[]; nextCursor: string | null } }
 interface ReactionBody { data: { liked: boolean; likeCount: number } }
 interface LikersBody { data: { items: { firstName: string; lastName: string }[]; nextCursor: string | null } }
+interface ReactorsBody { data: { items: { user: { firstName: string; lastName: string }; reaction: string; reactedAt: string }[]; nextCursor: string | null } }
+interface DetailedFeedBody { data: { items: { id: string; engagement: { reactionCount: number; viewerReaction: string | null }; reactionPreview: { user: { firstName: string } }[] }[] } }

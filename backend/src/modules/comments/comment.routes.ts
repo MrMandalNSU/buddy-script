@@ -11,7 +11,7 @@ import { pageQuerySchema } from "../posts/post.schemas.js";
 import { CommentController } from "./comment.controller.js";
 import { commentCreationRateLimit, commentReactionRateLimit } from "./comment.rate-limit.js";
 import { CommentRepository } from "./comment.repository.js";
-import { commentBodySchema, commentParamsSchema, postCommentParamsSchema } from "./comment.schemas.js";
+import { commentBodySchema, commentParamsSchema, commentReactionBodySchema, postCommentParamsSchema } from "./comment.schemas.js";
 import { CommentService } from "./comment.service.js";
 
 export function createCommentRouter(database: DatabaseClient, environment: Environment): Router {
@@ -23,8 +23,13 @@ export function createCommentRouter(database: DatabaseClient, environment: Envir
   router.post("/posts/:postId/comments", authenticate, commentCreationRateLimit, requireAccessCsrf(cookies), validateParams(postCommentParamsSchema), validateBody(commentBodySchema), asyncHandler(controller.createComment));
   router.get("/comments/:commentId/replies", authenticate, validateParams(commentParamsSchema), validateQuery(pageQuerySchema), asyncHandler(controller.listReplies));
   router.post("/comments/:commentId/replies", authenticate, commentCreationRateLimit, requireAccessCsrf(cookies), validateParams(commentParamsSchema), validateBody(commentBodySchema), asyncHandler(controller.createReply));
+  router.patch("/comments/:commentId", authenticate, commentCreationRateLimit, requireAccessCsrf(cookies), validateParams(commentParamsSchema), validateBody(commentBodySchema), asyncHandler(controller.update));
+  router.delete("/comments/:commentId", authenticate, commentCreationRateLimit, requireAccessCsrf(cookies), validateParams(commentParamsSchema), asyncHandler(controller.delete));
   router.post("/comments/:commentId/like", authenticate, commentReactionRateLimit, requireAccessCsrf(cookies), validateParams(commentParamsSchema), asyncHandler(controller.like));
   router.delete("/comments/:commentId/like", authenticate, commentReactionRateLimit, requireAccessCsrf(cookies), validateParams(commentParamsSchema), asyncHandler(controller.unlike));
   router.get("/comments/:commentId/likers", authenticate, validateParams(commentParamsSchema), validateQuery(pageQuerySchema), asyncHandler(controller.likers));
+  router.put("/comments/:commentId/reaction", authenticate, commentReactionRateLimit, requireAccessCsrf(cookies), validateParams(commentParamsSchema), validateBody(commentReactionBodySchema), asyncHandler(controller.react));
+  router.delete("/comments/:commentId/reaction", authenticate, commentReactionRateLimit, requireAccessCsrf(cookies), validateParams(commentParamsSchema), asyncHandler(controller.unreact));
+  router.get("/comments/:commentId/reactors", authenticate, validateParams(commentParamsSchema), validateQuery(pageQuerySchema), asyncHandler(controller.reactors));
   return router;
 }

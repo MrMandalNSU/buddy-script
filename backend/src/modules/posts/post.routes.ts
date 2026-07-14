@@ -10,7 +10,7 @@ import { AuthCookieService } from "../auth/cookie.service.js";
 import { PostController } from "./post.controller.js";
 import { postCreationRateLimit, postReactionRateLimit } from "./post.rate-limit.js";
 import { PostRepository } from "./post.repository.js";
-import { createPostSchema, pageQuerySchema, postParamsSchema } from "./post.schemas.js";
+import { createPostSchema, pageQuerySchema, postParamsSchema, reactionBodySchema } from "./post.schemas.js";
 import { PostService } from "./post.service.js";
 import type { CachePort } from "../../infrastructure/cache/cache.port.js";
 import type { CloudinaryService } from "../uploads/cloudinary.service.js";
@@ -28,5 +28,8 @@ export function createPostRouter(database: DatabaseClient, environment: Environm
   router.post("/:postId/like", postReactionRateLimit, requireAccessCsrf(cookies), validateParams(postParamsSchema), asyncHandler(controller.like));
   router.delete("/:postId/like", postReactionRateLimit, requireAccessCsrf(cookies), validateParams(postParamsSchema), asyncHandler(controller.unlike));
   router.get("/:postId/likers", validateParams(postParamsSchema), validateQuery(pageQuerySchema), asyncHandler(controller.likers));
+  router.put("/:postId/reaction", postReactionRateLimit, requireAccessCsrf(cookies), validateParams(postParamsSchema), validateBody(reactionBodySchema), asyncHandler(controller.react));
+  router.delete("/:postId/reaction", postReactionRateLimit, requireAccessCsrf(cookies), validateParams(postParamsSchema), asyncHandler(controller.unreact));
+  router.get("/:postId/reactors", validateParams(postParamsSchema), validateQuery(pageQuerySchema), asyncHandler(controller.reactors));
   return router;
 }

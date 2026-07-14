@@ -89,6 +89,34 @@ databaseSuite("comments API", { concurrent: false }, () => {
     expect((await alex.delete(`/api/v1/comments/${firstId}/like`).set("x-csrf-token", alexCsrf)).body).toMatchObject({ data: { liked: false, likeCount: 0 } });
     expect((await alex.delete(`/api/v1/comments/${firstId}/like`).set("x-csrf-token", alexCsrf)).body).toMatchObject({ data: { liked: false, likeCount: 0 } });
 
+    const love = await alex.put(`/api/v1/comments/${firstId}/reaction`).set("x-csrf-token", alexCsrf).send({ reaction: "love" });
+    expect(love.body).toMatchObject({ data: { reactionCount: 1, viewerReaction: "love", reactionBreakdown: { love: 1 } } });
+    const wow = await karim.put(`/api/v1/comments/${firstId}/reaction`).set("x-csrf-token", karimCsrf).send({ reaction: "wow" });
+    expect(wow.body).toMatchObject({ data: { reactionCount: 2, viewerReaction: "wow", reactionBreakdown: { love: 1, wow: 1 } } });
+    const changed = await alex.put(`/api/v1/comments/${firstId}/reaction`).set("x-csrf-token", alexCsrf).send({ reaction: "sad" });
+    expect(changed.body).toMatchObject({ data: { reactionCount: 2, viewerReaction: "sad", reactionBreakdown: { love: 0, sad: 1, wow: 1 } } });
+    const reactors = (await alex.get(`/api/v1/comments/${firstId}/reactors`)).body as ReactorsBody;
+    expect(reactors.data.items.map(({ reaction }) => reaction)).toEqual(expect.arrayContaining(["sad", "wow"]));
+    expect(reactors.data.items[0]?.user).not.toHaveProperty("email");
+
+    const edited = await alex.patch(`/api/v1/comments/${firstId}`).set("x-csrf-token", alexCsrf).send({ body: "First root comment edited" });
+    expect(edited.body).toMatchObject({ data: { id: firstId, body: "First root comment edited" } });
+    expect((await karim.patch(`/api/v1/comments/${firstId}`).set("x-csrf-token", karimCsrf).send({ body: "Unauthorized edit" })).status).toBe(403);
+    expect((await karim.delete(`/api/v1/comments/${firstId}`).set("x-csrf-token", karimCsrf)).status).toBe(403);
+
+    const removableReply = await karim.post(`/api/v1/comments/${firstId}/replies`).set("x-csrf-token", karimCsrf).send({ body: "Temporary reply" });
+    const removableReplyId = dataId(removableReply);
+    expect((await karim.delete(`/api/v1/comments/${removableReplyId}`).set("x-csrf-token", karimCsrf)).status).toBe(204);
+    expect(await database.comment.findUnique({ where: { id: removableReplyId } })).toBeNull();
+
+    const removableRoot = await karim.post(`/api/v1/posts/${publicId}/comments`).set("x-csrf-token", karimCsrf).send({ body: "Post owner may delete this thread" });
+    const removableRootId = dataId(removableRoot);
+    const cascadingReply = await karim.post(`/api/v1/comments/${removableRootId}/replies`).set("x-csrf-token", karimCsrf).send({ body: "Cascading reply" });
+    const cascadingReplyId = dataId(cascadingReply);
+    expect((await alex.patch(`/api/v1/comments/${removableRootId}`).set("x-csrf-token", alexCsrf).send({ body: "Post owner cannot edit" })).status).toBe(403);
+    expect((await alex.delete(`/api/v1/comments/${removableRootId}`).set("x-csrf-token", alexCsrf)).status).toBe(204);
+    expect(await database.comment.findMany({ where: { id: { in: [removableRootId, cascadingReplyId] } } })).toHaveLength(0);
+
     const privateComment = await alex.post(`/api/v1/posts/${privateId}/comments`).set("x-csrf-token", alexCsrf).send({ body: "Private comment" });
     const privateCommentId = dataId(privateComment);
     expect((await karim.get(`/api/v1/posts/${privateId}/comments`)).status).toBe(404);
@@ -123,3 +151,4 @@ interface PageBody { data: { items: { id: string }[]; nextCursor: string | null 
 interface FeedBody { data: { items: { id: string; commentPreview: { id: string; postId: string; parentId: string | null; depth: number; body: string; engagement: { likeCount: number; replyCount: number; likedByViewer: boolean }; createdAt: string; updatedAt: string }[] }[] } }
 interface ReactionBody { data: { liked: boolean; likeCount: number } }
 interface LikersBody { data: { items: { firstName: string; lastName: string }[]; nextCursor: string | null } }
+interface ReactorsBody { data: { items: { user: { firstName: string; lastName: string }; reaction: string; reactedAt: string }[]; nextCursor: string | null } }

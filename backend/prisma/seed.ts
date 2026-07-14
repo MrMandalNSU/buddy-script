@@ -38,10 +38,12 @@ async function persistFixtures(tx: Prisma.TransactionClient, passwordHash: strin
   }
 
   for (const like of demoPostLikes) {
-    await tx.postLike.upsert({ where: { postId_userId: { postId: like.targetId, userId: like.userId } }, create: { id: like.id, postId: like.targetId, userId: like.userId, createdAt: at(now, like.minutesAgo) }, update: {} });
+    const reactedAt = at(now, like.minutesAgo);
+    await tx.postLike.upsert({ where: { postId_userId: { postId: like.targetId, userId: like.userId } }, create: { id: like.id, postId: like.targetId, userId: like.userId, createdAt: reactedAt, updatedAt: reactedAt }, update: {} });
   }
   for (const like of demoCommentLikes) {
-    await tx.commentLike.upsert({ where: { commentId_userId: { commentId: like.targetId, userId: like.userId } }, create: { id: like.id, commentId: like.targetId, userId: like.userId, createdAt: at(now, like.minutesAgo) }, update: {} });
+    const reactedAt = at(now, like.minutesAgo);
+    await tx.commentLike.upsert({ where: { commentId_userId: { commentId: like.targetId, userId: like.userId } }, create: { id: like.id, commentId: like.targetId, userId: like.userId, createdAt: reactedAt, updatedAt: reactedAt }, update: {} });
   }
 
   await tx.$executeRaw`UPDATE posts p SET like_count = (SELECT count(*)::integer FROM post_likes pl WHERE pl.post_id = p.id), comment_count = (SELECT count(*)::integer FROM comments c WHERE c.post_id = p.id AND c.parent_id IS NULL)`;

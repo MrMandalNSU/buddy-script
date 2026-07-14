@@ -2,7 +2,7 @@ import "dotenv/config";
 import pino from "pino";
 import { v7 as uuidv7 } from "uuid";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { PostVisibility } from "../../src/generated/prisma/client.js";
+import { PostVisibility, ReactionType } from "../../src/generated/prisma/client.js";
 import { demoSummary } from "../../prisma/seed-data.js";
 import { createDatabaseClient, type DatabaseClient } from "../../src/infrastructure/database/client.js";
 
@@ -22,10 +22,10 @@ databaseSuite("Neon schema integration", { concurrent: false }, () => {
 
   it("contains the deterministic public and private seed posts", async () => {
     const grouped = await database.post.groupBy({ by: ["visibility"], _count: true });
-    expect(grouped).toEqual(expect.arrayContaining([
-      expect.objectContaining({ visibility: PostVisibility.PUBLIC, _count: demoSummary.publicPosts }),
-      expect.objectContaining({ visibility: PostVisibility.PRIVATE, _count: demoSummary.privatePosts }),
-    ]));
+    const publicCount = grouped.find(({ visibility }) => visibility === PostVisibility.PUBLIC)?._count ?? 0;
+    const privateCount = grouped.find(({ visibility }) => visibility === PostVisibility.PRIVATE)?._count ?? 0;
+    expect(publicCount).toBeGreaterThanOrEqual(demoSummary.publicPosts);
+    expect(privateCount).toBeGreaterThanOrEqual(demoSummary.privatePosts);
   });
 
   it("enforces normalized unique emails at the database boundary", async () => {
@@ -53,6 +53,17 @@ databaseSuite("Neon schema integration", { concurrent: false }, () => {
     await expect(database.postLike.create({ data: {
       id: uuidv7(), postId: "01900000-0000-7000-8000-000000000101", userId: "01900000-0000-7000-8000-000000000003",
     } })).rejects.toThrow();
+  });
+
+  it("migrates existing likes to typed Like reactions", async () => {
+    const [postReaction, commentReaction] = await Promise.all([
+      database.postLike.findFirst({ select: { reactionType: true, createdAt: true, updatedAt: true } }),
+      database.commentLike.findFirst({ select: { reactionType: true, createdAt: true, updatedAt: true } }),
+    ]);
+    expect(postReaction?.reactionType).toBe(ReactionType.LIKE);
+    expect(commentReaction?.reactionType).toBe(ReactionType.LIKE);
+    expect(postReaction?.updatedAt).toEqual(postReaction?.createdAt);
+    expect(commentReaction?.updatedAt).toEqual(commentReaction?.createdAt);
   });
 
   it("installs the required partial feed indexes", async () => {

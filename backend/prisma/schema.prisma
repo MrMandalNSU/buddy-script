@@ -22,6 +22,18 @@ enum PostVisibility {
   @@map("post_visibility")
 }
 
+enum ReactionType {
+  LIKE
+  LOVE
+  CARE
+  HAHA
+  WOW
+  SAD
+  ANGRY
+
+  @@map("reaction_type")
+}
+
 model User {
   id              String           @id @db.Uuid
   firstName       String           @map("first_name") @db.VarChar(80)
@@ -111,29 +123,35 @@ model Comment {
 }
 
 model PostLike {
-  id        String   @id @db.Uuid
-  postId    String   @map("post_id") @db.Uuid
-  userId    String   @map("user_id") @db.Uuid
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id           String       @id @db.Uuid
+  postId       String       @map("post_id") @db.Uuid
+  userId       String       @map("user_id") @db.Uuid
+  reactionType ReactionType @default(LIKE) @map("reaction_type")
+  createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  post         Post         @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([postId, userId], map: "post_likes_post_user_key")
   @@index([postId, createdAt, id], map: "post_likes_post_created_id_idx")
+  @@index([postId, updatedAt(sort: Desc), id(sort: Desc)], map: "post_likes_post_updated_id_idx")
   @@index([userId], map: "post_likes_user_idx")
   @@map("post_likes")
 }
 
 model CommentLike {
-  id        String   @id @db.Uuid
-  commentId String   @map("comment_id") @db.Uuid
-  userId    String   @map("user_id") @db.Uuid
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  comment   Comment  @relation(fields: [commentId], references: [id], onDelete: Cascade)
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id           String       @id @db.Uuid
+  commentId    String       @map("comment_id") @db.Uuid
+  userId       String       @map("user_id") @db.Uuid
+  reactionType ReactionType @default(LIKE) @map("reaction_type")
+  createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  comment      Comment      @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([commentId, userId], map: "comment_likes_comment_user_key")
   @@index([commentId, createdAt, id], map: "comment_likes_comment_created_id_idx")
+  @@index([commentId, updatedAt(sort: Desc), id(sort: Desc)], map: "comment_likes_comment_updated_id_idx")
   @@index([userId], map: "comment_likes_user_idx")
   @@map("comment_likes")
 }

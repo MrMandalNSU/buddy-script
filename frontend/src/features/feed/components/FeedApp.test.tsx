@@ -9,13 +9,19 @@ const repository = vi.hoisted(() => ({
   list: vi.fn(),
   create: vi.fn(),
   setPostLike: vi.fn(),
+  setPostReaction: vi.fn(),
   comments: vi.fn(),
   addComment: vi.fn(),
   replies: vi.fn(),
   addReply: vi.fn(),
   setCommentLike: vi.fn(),
+  setCommentReaction: vi.fn(),
+  updateComment: vi.fn(),
+  deleteComment: vi.fn(),
   postLikers: vi.fn(),
   commentLikers: vi.fn(),
+  postReactors: vi.fn(),
+  commentReactors: vi.fn(),
 }));
 const authMocks = vi.hoisted(() => ({ logout: vi.fn() }));
 const routerMocks = vi.hoisted(() => ({ replace: vi.fn() }));
@@ -27,6 +33,7 @@ vi.mock("../repository", () => ({
     comments: (postId: string) => ["comments", postId],
     replies: (commentId: string) => ["replies", commentId],
     likers: (kind: string, id: string) => ["likers", kind, id],
+    reactors: (kind: string, id: string) => ["reactors", kind, id],
   },
 }));
 vi.mock("@/features/auth/AuthProvider", () => ({
@@ -49,13 +56,15 @@ vi.mock("next/image", () => ({
 }));
 
 const author = { id: "author-1", firstName: "Dylan", lastName: "Field", avatarUrl: null };
+const emptyBreakdown = { like: 0, love: 0, care: 0, haha: 0, wow: 0, sad: 0, angry: 0 };
 const makePost = (id: string, body: string): Post => ({
   id,
   body,
   visibility: "public",
   image: null,
   author,
-  engagement: { likeCount: 0, commentCount: 0, likedByViewer: false },
+  engagement: { likeCount: 0, commentCount: 0, likedByViewer: false, reactionCount: 0, viewerReaction: null, reactionBreakdown: { ...emptyBreakdown } },
+  reactionPreview: [],
   commentPreview: [],
   createdAt: "2026-07-14T00:00:00.000Z",
   updatedAt: "2026-07-14T00:00:00.000Z",
@@ -67,7 +76,7 @@ const makeComment = (id: string, postId: string, body: string, depth: 0 | 1 = 0,
   depth,
   body,
   author: { id: "comment-author", firstName: "Ava", lastName: "Thompson", avatarUrl: null },
-  engagement: { likeCount: 0, replyCount: 0, likedByViewer: false },
+  engagement: { likeCount: 0, replyCount: 0, likedByViewer: false, reactionCount: 0, viewerReaction: null, reactionBreakdown: { ...emptyBreakdown } },
   createdAt: "2026-07-14T00:00:00.000Z",
   updatedAt: "2026-07-14T00:00:00.000Z",
 });
@@ -199,22 +208,50 @@ describe("feed cache and shell", () => {
     expect(repository.create).toHaveBeenCalledWith({ body: "A newly published post", visibility: "public" });
   });
 
-  it("keeps post likes wired through the rewritten card", async () => {
+  it("opens all seven reactions and saves a typed post reaction", async () => {
     const post = makePost("liked-post", "Like this post");
-    const likedPost = { ...post, engagement: { ...post.engagement, likeCount: 1, likedByViewer: true } };
-    repository.list.mockResolvedValueOnce({ items: [post], nextCursor: null }).mockResolvedValue({ items: [likedPost], nextCursor: null });
-    repository.setPostLike.mockResolvedValue({ liked: true, likeCount: 1 });
+    const lovedPost = { ...post, engagement: { ...post.engagement, likeCount: 1, likedByViewer: true, reactionCount: 1, viewerReaction: "love" as const, reactionBreakdown: { ...emptyBreakdown, love: 1 } } };
+    repository.list.mockResolvedValueOnce({ items: [post], nextCursor: null }).mockResolvedValue({ items: [lovedPost], nextCursor: null });
+    repository.setPostReaction.mockResolvedValue({ reactionCount: 1, viewerReaction: "love", reactionBreakdown: { ...emptyBreakdown, love: 1 }, reactionPreview: [] });
     renderFeed();
     await screen.findByText("Like this post");
-    fireEvent.click(screen.getByRole("button", { name: "Like" }));
-    await waitFor(() => expect(repository.setPostLike).toHaveBeenCalledWith("liked-post", true));
-    await screen.findByRole("button", { name: "Unlike" });
+    fireEvent.focus(screen.getByRole("button", { name: "Like" }));
+    const picker = screen.getByRole("menu", { name: "Choose a reaction" });
+    expect(within(picker).getAllByRole("menuitem").map((button) => button.getAttribute("aria-label"))).toEqual(["Like", "Love", "Care", "Haha", "Wow", "Sad", "Angry"]);
+    fireEvent.click(within(picker).getByRole("menuitem", { name: "Love" }));
+    await waitFor(() => expect(repository.setPostReaction).toHaveBeenCalledWith("liked-post", "love"));
+    expect(await screen.findByRole("button", { name: "Love" })).toBeInTheDocument();
+  });
+
+  it("shows each active reaction type in a comment reaction preview", async () => {
+    const comment = {
+      ...makeComment("mixed-comment", "mixed-post", "A mixed reaction comment"),
+      engagement: {
+        ...makeComment("mixed-comment", "mixed-post", "").engagement,
+        likeCount: 2,
+        likedByViewer: true,
+        reactionCount: 2,
+        viewerReaction: "haha" as const,
+        reactionBreakdown: { ...emptyBreakdown, like: 1, haha: 1 },
+      },
+    };
+    const post = {
+      ...makePost("mixed-post", "Mixed reactions"),
+      commentPreview: [comment],
+      engagement: { ...makePost("mixed-post", "").engagement, commentCount: 1 },
+    };
+    repository.list.mockResolvedValue({ items: [post], nextCursor: null });
+    renderFeed();
+
+    await screen.findByText("A mixed reaction comment");
+    const summary = screen.getByRole("button", { name: "2 reactions: Like, Haha" });
+    expect(Array.from(summary.querySelectorAll("[data-reaction-icon]")).map((icon) => icon.getAttribute("data-reaction-icon"))).toEqual(["like", "haha"]);
   });
 
   it("posts comments and replies through the rewritten thread controls", async () => {
-    const root = { ...makeComment("comment-1", "thread-post", "A root comment"), engagement: { likeCount: 0, replyCount: 0, likedByViewer: false } };
+    const root = makeComment("comment-1", "thread-post", "A root comment");
     const reply = makeComment("reply-1", "thread-post", "A nested reply", 1, root.id);
-    const post = { ...makePost("thread-post", "Discuss this post"), engagement: { likeCount: 0, commentCount: 1, likedByViewer: false }, commentPreview: [root] };
+    const post = { ...makePost("thread-post", "Discuss this post"), engagement: { ...makePost("thread-post", "").engagement, commentCount: 1 }, commentPreview: [root] };
     repository.list.mockResolvedValue({ items: [post], nextCursor: null });
     repository.comments.mockResolvedValue({ items: [root], nextCursor: null });
     repository.addComment.mockResolvedValue(root);
@@ -234,6 +271,27 @@ describe("feed cache and shell", () => {
     fireEvent.click(within(replyInput.closest("form")!).getByRole("button", { name: "Post comment" }));
     await waitFor(() => expect(repository.addReply).toHaveBeenCalledWith("comment-1", "A nested reply"));
     await screen.findByText("A nested reply");
+  });
+
+  it("lets a commenter edit and delete their own comment", async () => {
+    const root = { ...makeComment("owned-comment", "owned-post", "Original comment"), author: { id: "viewer-1", firstName: "Alex", lastName: "Morgan", avatarUrl: null } };
+    const post = { ...makePost("owned-post", "Owned thread"), commentPreview: [root], engagement: { ...makePost("owned-post", "").engagement, commentCount: 1 } };
+    const updated = { ...root, body: "Updated comment", updatedAt: "2026-07-14T00:02:00.000Z" };
+    repository.list.mockResolvedValueOnce({ items: [post], nextCursor: null }).mockResolvedValue({ items: [{ ...post, commentPreview: [updated] }], nextCursor: null });
+    repository.updateComment.mockResolvedValue(updated);
+    repository.deleteComment.mockResolvedValue(undefined);
+    renderFeed();
+    await screen.findByText("Original comment");
+    fireEvent.click(screen.getByRole("button", { name: "Comment options" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /Edit/ }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Edit comment" }), { target: { value: "Updated comment" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(repository.updateComment).toHaveBeenCalledWith("owned-comment", "Updated comment"));
+    await screen.findByText("Updated comment");
+    fireEvent.click(screen.getByRole("button", { name: "Comment options" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /Delete/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    await waitFor(() => expect(repository.deleteComment).toHaveBeenCalledWith("owned-comment"));
   });
 
   it("loads the next page of posts without replacing the timeline", async () => {

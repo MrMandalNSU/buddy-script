@@ -1,10 +1,21 @@
 import type { User } from "@/features/auth/types";
 export type Visibility = "public" | "private";
 export type FeedUser = Pick<User, "id" | "firstName" | "lastName" | "avatarUrl">;
-export type Engagement = { likeCount: number; likedByViewer: boolean };
+export type ReactionType = "like" | "love" | "care" | "haha" | "wow" | "sad" | "angry";
+export type ReactionBreakdown = Record<ReactionType, number>;
+export type Engagement = {
+  likeCount: number;
+  likedByViewer: boolean;
+  reactionCount: number;
+  viewerReaction: ReactionType | null;
+  reactionBreakdown: ReactionBreakdown;
+};
 export type VerifiedImage = { publicId: string; secureUrl: string; version: number; width: number; height: number; bytes: number; format: string };
 export type Comment = { id: string; postId: string; parentId: string | null; depth: 0 | 1; body: string; author: FeedUser; engagement: Engagement & { replyCount: number }; createdAt: string; updatedAt: string };
-export type Post = { id: string; body: string | null; visibility: Visibility; image: VerifiedImage | null; author: FeedUser; engagement: Engagement & { commentCount: number }; commentPreview: Comment[]; createdAt: string; updatedAt: string };
+export type ReactionPreview = { user: FeedUser; reaction: ReactionType; reactedAt: string };
+export type Post = { id: string; body: string | null; visibility: Visibility; image: VerifiedImage | null; author: FeedUser; engagement: Engagement & { commentCount: number }; reactionPreview: ReactionPreview[]; commentPreview: Comment[]; createdAt: string; updatedAt: string };
 export type Page<T> = { items: T[]; nextCursor: string | null };
 export type Liker = FeedUser & { likedAt: string };
+export type Reactor = { user: FeedUser; reaction: ReactionType; reactedAt: string };
+export type ReactionState = { reactionCount: number; viewerReaction: ReactionType | null; reactionBreakdown: ReactionBreakdown; reactionPreview?: ReactionPreview[] };
 export type CreatePostInput = { body?: string; visibility: Visibility; image?: VerifiedImage & { signature: string } };
