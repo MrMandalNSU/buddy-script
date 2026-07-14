@@ -6,7 +6,7 @@
   },
   "deploy": {
     "preDeployCommand": [
-      "pnpm db:migrate:deploy"
+      "node node_modules/prisma/build/index.js migrate deploy"
     ],
     "healthcheckPath": "/health/ready",
     "healthcheckTimeout": 300,

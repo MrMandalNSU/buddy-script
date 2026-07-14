@@ -13,10 +13,7 @@ RUN pnpm build
 
 FROM node:24-bookworm-slim AS runtime
 ENV NODE_ENV=production \
-    PORT=4000 \
-    PNPM_HOME=/pnpm \
-    PATH=/pnpm:$PATH
-RUN corepack enable && corepack prepare pnpm@11.7.0 --activate
+    PORT=4000
 WORKDIR /app
 COPY --from=build --chown=node:node /app/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/dist ./dist
