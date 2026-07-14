@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { PrismaNeon } from "@prisma/adapter-neon";
+import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client.js";
 import type { Prisma } from "../src/generated/prisma/client.js";
 import { hashPassword } from "../src/modules/auth/password.service.js";
@@ -8,7 +8,7 @@ import { DEMO_PASSWORD, demoCommentReactions, demoComments, demoPostReactions, d
 const databaseUrl = process.env.DATABASE_URL ?? process.env.DATABASE_URL_DEV;
 if (databaseUrl === undefined) throw new Error("DATABASE_URL or DATABASE_URL_DEV is required to seed the database");
 
-const prisma = new PrismaClient({ adapter: new PrismaNeon({ connectionString: databaseUrl }) });
+const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
 const at = (now: Date, minutesAgo: number): Date => new Date(now.getTime() - minutesAgo * 60_000);
 
 async function persistFixtures(tx: Prisma.TransactionClient, passwordHash: string, now: Date): Promise<void> {

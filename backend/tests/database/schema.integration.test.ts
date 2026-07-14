@@ -10,7 +10,7 @@ const databaseUrl = process.env.DATABASE_URL ?? process.env.DATABASE_URL_DEV;
 const databaseSuite = process.env.RUN_DATABASE_TESTS === "true" && databaseUrl !== undefined ? describe : describe.skip;
 const integrationDatabaseUrl = databaseUrl ?? "postgresql://integration-tests-disabled.invalid/buddy";
 
-databaseSuite("Neon schema integration", { concurrent: false }, () => {
+databaseSuite("PostgreSQL schema integration", { concurrent: false }, () => {
   let database: DatabaseClient;
 
   beforeAll(async () => {

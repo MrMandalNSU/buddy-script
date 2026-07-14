@@ -25,7 +25,7 @@ BuddyScript's backend is a production-oriented Express and TypeScript API backed
 - Node.js, TypeScript, and native ESM
 - Express 5
 - PostgreSQL/Neon
-- Prisma 7 with the Neon adapter
+- Prisma 7 with the PostgreSQL adapter
 - Argon2id password hashing
 - JOSE JWT signing and verification
 - Zod request/environment validation
@@ -39,11 +39,11 @@ BuddyScript's backend is a production-oriented Express and TypeScript API backed
 
 - Node.js 22 or newer
 - pnpm 11.7.0
-- A PostgreSQL database; Neon is the supported/recommended configuration
+- A PostgreSQL database, either local or hosted (Neon is supported)
 - A pooled runtime URL and preferably a direct migration URL
 - Optional Cloudinary account for post image uploads
 
-No database Docker Compose file is included. The current runtime uses `@prisma/adapter-neon`, so Neon is the simplest supported local-development database.
+No database Docker Compose file is included. The runtime uses Prisma's standard PostgreSQL adapter, so it works with a regular local PostgreSQL server or a hosted PostgreSQL provider such as Neon.
 
 Enable the declared pnpm version if necessary:
 

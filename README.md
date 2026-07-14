@@ -26,7 +26,7 @@ Use this README for the complete stack. The application-specific guides contain 
 
 - Node.js, Express 5, and TypeScript
 - PostgreSQL/Neon
-- Prisma 7 with the Neon adapter
+- Prisma 7 with the PostgreSQL adapter
 - Argon2id and JOSE
 - Zod request/environment validation
 - Pino logs and Prometheus metrics

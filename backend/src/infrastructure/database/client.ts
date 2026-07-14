@@ -1,11 +1,11 @@
-import { PrismaNeon } from "@prisma/adapter-neon";
+import { PrismaPg } from "@prisma/adapter-pg";
 import type { Logger } from "pino";
 import { PrismaClient } from "../../generated/prisma/client.js";
 
 export type DatabaseClient = PrismaClient;
 
 export function createDatabaseClient(databaseUrl: string, logger: Logger): DatabaseClient {
-  const adapter = new PrismaNeon(
+  const adapter = new PrismaPg(
     {
       connectionString: databaseUrl,
       connectionTimeoutMillis: 10_000,
@@ -13,8 +13,8 @@ export function createDatabaseClient(databaseUrl: string, logger: Logger): Datab
       max: 10,
     },
     {
-      onPoolError: (error) => logger.error({ err: error }, "Neon connection pool error"),
-      onConnectionError: (error) => logger.error({ err: error }, "Neon database connection error"),
+      onPoolError: (error) => logger.error({ err: error }, "PostgreSQL connection pool error"),
+      onConnectionError: (error) => logger.error({ err: error }, "PostgreSQL database connection error"),
     },
   );
 
