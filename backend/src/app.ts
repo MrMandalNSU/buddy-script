@@ -29,6 +29,10 @@ export function createApp({ environment, logger, readiness, apiRouter }: Applica
   app.set("trust proxy", environment.trustProxy);
 
   app.use(requestContext);
+  app.use((_request, response, next) => {
+    response.setHeader("Cache-Control", "no-store");
+    next();
+  });
   app.use(createHttpLogger(logger));
   app.use(metricsMiddleware);
   app.use(helmet({ contentSecurityPolicy: false, crossOriginResourcePolicy: { policy: "same-site" } }));

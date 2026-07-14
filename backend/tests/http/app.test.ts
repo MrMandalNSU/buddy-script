@@ -13,6 +13,7 @@ describe("HTTP foundation", () => {
     const response = await request(createTestApp()).get("/health/live").set("x-request-id", "test-request-123");
     expect(response.status).toBe(200);
     expect(response.headers["x-request-id"]).toBe("test-request-123");
+    expect(response.headers["cache-control"]).toBe("no-store");
     expect(response.body).toMatchObject({ success: true, data: { status: "alive" }, meta: { requestId: "test-request-123" } });
   });
 
