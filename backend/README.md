@@ -576,9 +576,9 @@ Production requires HTTPS when `COOKIE_SECURE=true`. Keep the frontend and API i
 
 ### Build the Docker image
 
-The repository contains a multi-stage `Dockerfile`, but its dependency layer currently runs the `postinstall` Prisma generation step without supplying a database URL. Because `prisma.config.ts` requires a URL even for client generation, a clean Docker build will stop at `pnpm install` until the Dockerfile separates dependency installation from generation or supplies a build-safe Prisma configuration.
+The multi-stage `Dockerfile` installs OpenSSL in a shared Debian base so Prisma selects the correct Bookworm/OpenSSL 3 target. It also supplies a non-secret, unreachable placeholder URL only while generating the Prisma client; generation does not connect to that URL, and production database credentials are provided only at runtime.
 
-After that release gate is fixed, the intended command from `backend/` is:
+From `backend/`:
 
 ```bash
 docker build -t buddyscript-api .
@@ -586,7 +586,7 @@ docker build -t buddyscript-api .
 
 Run the application image with the required environment values supplied by your platform. The image exposes port 4000 and includes a `/health/live` health check.
 
-The runtime image intentionally contains the compiled server rather than the full migration workspace. Run `pnpm db:migrate:deploy` as a separate release job from a source/build environment before shifting traffic.
+The runtime image retains the Prisma CLI and migration workspace for Railway's pre-deploy hook. The hook invokes the installed CLI directly instead of running pnpm or reinstalling dependencies inside the non-root runtime container.
 
 ### Release order
 

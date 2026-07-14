@@ -1,4 +1,9 @@
-FROM node:24-bookworm-slim AS build
+FROM node:24-bookworm-slim AS base
+RUN apt-get update -y \
+    && apt-get install -y --no-install-recommends openssl \
+    && rm -rf /var/lib/apt/lists/*
+
+FROM base AS build
 ENV PNPM_HOME=/pnpm \
     PATH=/pnpm:$PATH \
     DATABASE_URL=postgresql://prisma:prisma@127.0.0.1:5432/prisma_build
@@ -11,7 +16,7 @@ COPY eslint.config.js ./
 COPY src ./src
 RUN pnpm build && node --input-type=module -e "await import('./dist/generated/prisma/client.js')"
 
-FROM node:24-bookworm-slim AS runtime
+FROM base AS runtime
 ENV NODE_ENV=production \
     PORT=4000
 WORKDIR /app
