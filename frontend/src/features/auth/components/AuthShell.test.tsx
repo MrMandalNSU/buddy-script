@@ -15,14 +15,16 @@ afterEach(cleanup);
 
 describe("AuthShell", () => {
   it.each([
-    ["login", "/assets/login.png"],
-    ["register", "/assets/registration.png"],
-  ] as const)("renders the reference %s composition", (kind, artwork) => {
+    ["login", "/assets/login.png", "1269", "1240"],
+    ["register", "/assets/registration.png", "1928", "1422"],
+  ] as const)("renders the reference %s composition", (kind, artwork, width, height) => {
     const { container } = render(<AuthShell kind={kind}><p>Form content</p></AuthShell>);
 
     expect(container.querySelector("main")).toHaveClass("auth-shell", `auth-shell--${kind}`);
     expect(container.querySelector(".auth-layout")).toContainElement(container.querySelector(".auth-card"));
-    expect(container.querySelector(`.auth-artwork img[src="${artwork}"]`)).toBeInTheDocument();
+    const image = container.querySelector(`.auth-artwork img[src="${artwork}"]`);
+    expect(image).toHaveAttribute("width", width);
+    expect(image).toHaveAttribute("height", height);
     expect(container.querySelectorAll(".auth-shape")).toHaveLength(3);
   });
 });

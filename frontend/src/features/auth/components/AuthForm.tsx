@@ -79,7 +79,7 @@ export function AuthForm({ kind }: { kind: AuthKind }) {
     <Image className="auth-logo" src="/assets/logo.svg" alt="BuddyScript" width={185} height={46} priority />
     <p className="auth-eyebrow">{kind === "login" ? "Welcome back" : "Get Started Now"}</p>
     <h1>{kind === "login" ? "Login to your account" : "Registration"}</h1>
-    <button className="google-button" type="button" disabled aria-label="Google authentication is not available in this demo"><Image src="/assets/google.svg" alt="" width={20} height={20} />{kind === "login" ? "Or sign-in with google" : "Register with google"}</button>
+    <button className="google-button" type="button" aria-disabled="true" aria-label="Google authentication is not available in this demo"><Image src="/assets/google.svg" alt="" width={20} height={20} />{kind === "login" ? "Or sign-in with google" : "Register with google"}</button>
     <div className="or-divider"><span>Or</span></div>
     <form className="auth-form" onSubmit={submit} noValidate>
       {kind === "register" && <div className="name-fields">{input("firstName", "First name", "text", "given-name")}{input("lastName", "Last name", "text", "family-name")}</div>}

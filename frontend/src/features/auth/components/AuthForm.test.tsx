@@ -91,11 +91,16 @@ describe("AuthForm password controls", () => {
     render(<AuthForm kind="login" />);
 
     expect(screen.queryByRole("list", { name: "Password requirements" })).not.toBeInTheDocument();
+    const google = screen.getByRole("button", { name: "Google authentication is not available in this demo" });
+    expect(google).toBeEnabled();
+    expect(google).toHaveAttribute("aria-disabled", "true");
     const remember = screen.getByRole("checkbox", { name: "Remember me" });
     expect(remember).toBeEnabled();
     expect(remember).toBeChecked();
     fireEvent.click(remember);
     expect(remember).not.toBeChecked();
+    const options = remember.closest(".form-options");
+    expect(options).toContainElement(screen.getByRole("button", { name: "Forgot password?" }));
     const password = screen.getByLabelText("Password");
     fireEvent.click(screen.getByRole("button", { name: "Show password" }));
     expect(password).toHaveAttribute("type", "text");
