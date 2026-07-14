@@ -81,7 +81,7 @@ export function AuthForm({ kind }: { kind: AuthKind }) {
     <h1>{kind === "login" ? "Login to your account" : "Registration"}</h1>
     <button className="google-button" type="button" disabled aria-label="Google authentication is not available in this demo"><Image src="/assets/google.svg" alt="" width={20} height={20} />{kind === "login" ? "Or sign-in with google" : "Register with google"}</button>
     <div className="or-divider"><span>Or</span></div>
-    <form onSubmit={submit} noValidate>
+    <form className="auth-form" onSubmit={submit} noValidate>
       {kind === "register" && <div className="name-fields">{input("firstName", "First name", "text", "given-name")}{input("lastName", "Last name", "text", "family-name")}</div>}
       {input("email", "Email", "email", "email")}
       {passwordInput("password", "Password", kind === "login" ? "current-password" : "new-password", kind === "register" ? "password-requirements" : undefined)}
@@ -92,7 +92,7 @@ export function AuthForm({ kind }: { kind: AuthKind }) {
       </ul>}
       {kind === "register" && passwordInput("confirmPassword", "Repeat Password", "new-password", passwordsMatch ? "confirmPassword-match" : undefined, passwordsMatch)}
       <div className="form-options">
-        <label className="check"><input type="checkbox" checked={kind === "login" ? login.remember : register.acceptedTerms} disabled={kind === "login"} onChange={(event) => update(kind === "login" ? "remember" : "acceptedTerms", event.target.checked)} /><span>{kind === "login" ? "Secure session managed automatically" : "I agree to terms & conditions"}</span></label>
+        <label className="check"><input type="checkbox" checked={kind === "login" ? login.remember : register.acceptedTerms} onChange={(event) => update(kind === "login" ? "remember" : "acceptedTerms", event.target.checked)} /><span>{kind === "login" ? "Remember me" : "I agree to terms & conditions"}</span></label>
         {kind === "login" && <button className="text-button" type="button" disabled>Forgot password?</button>}
       </div>
       {errors.acceptedTerms && <span className="field-error">{errors.acceptedTerms}</span>}

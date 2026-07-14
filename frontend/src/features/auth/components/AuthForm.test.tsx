@@ -91,9 +91,22 @@ describe("AuthForm password controls", () => {
     render(<AuthForm kind="login" />);
 
     expect(screen.queryByRole("list", { name: "Password requirements" })).not.toBeInTheDocument();
+    const remember = screen.getByRole("checkbox", { name: "Remember me" });
+    expect(remember).toBeEnabled();
+    expect(remember).toBeChecked();
+    fireEvent.click(remember);
+    expect(remember).not.toBeChecked();
     const password = screen.getByLabelText("Password");
     fireEvent.click(screen.getByRole("button", { name: "Show password" }));
     expect(password).toHaveAttribute("type", "text");
+  });
+
+  it("keeps corrected registration actions and required consent", () => {
+    render(<AuthForm kind="register" />);
+
+    expect(screen.getByRole("button", { name: "Create account" })).toBeInTheDocument();
+    expect(screen.getByText("Already have an account?")).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "I agree to terms & conditions" })).not.toBeChecked();
   });
 });
 
