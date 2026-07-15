@@ -6,6 +6,7 @@ The implemented product includes account registration and login, persistent or b
 
 ## Repository guides
 
+- [Feature and System Design](PROJECT_DOCUMENTATION.md)
 - [Frontend documentation](frontend/README.md)
 - [Backend documentation](backend/README.md)
 
@@ -231,12 +232,12 @@ The browser uploads image bytes directly to Cloudinary after receiving a signed,
 
 ## Application routes
 
-| Frontend route | Purpose |
-| --- | --- |
-| `/` | Session-aware redirect to login or feed. |
-| `/login` | Account login and Remember Me preference. |
-| `/register` | Account creation and password policy UX. |
-| `/feed` | Protected social feed. |
+| Frontend route | Purpose                                   |
+| -------------- | ----------------------------------------- |
+| `/`            | Session-aware redirect to login or feed.  |
+| `/login`       | Account login and Remember Me preference. |
+| `/register`    | Account creation and password policy UX.  |
+| `/feed`        | Protected social feed.                    |
 
 All business API routes are under `/api/v1`. See the [backend API overview](backend/README.md#api-overview) or the running OpenAPI document.
 
@@ -246,32 +247,32 @@ All business API routes are under `/api/v1`. See the [backend API overview](back
 
 Run from `frontend/`:
 
-| Command | Purpose |
-| --- | --- |
-| `pnpm dev` | Start development mode. |
-| `pnpm lint` | Run ESLint. |
-| `pnpm typecheck` | Run TypeScript checks. |
-| `pnpm test` | Run frontend tests. |
-| `pnpm build` | Create the production build. |
-| `pnpm start` | Run the built frontend. |
+| Command          | Purpose                      |
+| ---------------- | ---------------------------- |
+| `pnpm dev`       | Start development mode.      |
+| `pnpm lint`      | Run ESLint.                  |
+| `pnpm typecheck` | Run TypeScript checks.       |
+| `pnpm test`      | Run frontend tests.          |
+| `pnpm build`     | Create the production build. |
+| `pnpm start`     | Run the built frontend.      |
 
 ### Backend
 
 Run from `backend/`:
 
-| Command | Purpose |
-| --- | --- |
-| `pnpm dev` | Start API watch mode. |
-| `pnpm check` | Run lint, types, tests, and build. |
-| `pnpm test` | Run tests without DB suites by default. |
-| `pnpm build` | Compile to `dist/`. |
-| `pnpm start` | Run the compiled API. |
-| `pnpm db:validate` | Validate Prisma schema/configuration. |
-| `pnpm db:generate` | Regenerate the Prisma client. |
-| `pnpm db:migrate:deploy` | Apply committed migrations. |
-| `pnpm db:migrate:dev` | Create/apply a development migration. |
-| `pnpm db:seed` | Upsert deterministic demo data. |
-| `pnpm db:studio` | Open Prisma Studio. |
+| Command                  | Purpose                                 |
+| ------------------------ | --------------------------------------- |
+| `pnpm dev`               | Start API watch mode.                   |
+| `pnpm check`             | Run lint, types, tests, and build.      |
+| `pnpm test`              | Run tests without DB suites by default. |
+| `pnpm build`             | Compile to `dist/`.                     |
+| `pnpm start`             | Run the compiled API.                   |
+| `pnpm db:validate`       | Validate Prisma schema/configuration.   |
+| `pnpm db:generate`       | Regenerate the Prisma client.           |
+| `pnpm db:migrate:deploy` | Apply committed migrations.             |
+| `pnpm db:migrate:dev`    | Create/apply a development migration.   |
+| `pnpm db:seed`           | Upsert deterministic demo data.         |
+| `pnpm db:studio`         | Open Prisma Studio.                     |
 
 ## Quality checks
 
